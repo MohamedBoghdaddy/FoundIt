@@ -113,11 +113,6 @@ The app includes a **questionnaire-based matching system** that ensures items ar
 
 ---
 
-## 🤝 Contributing
-
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
-
----
 
 ## 📬 Contact
 
