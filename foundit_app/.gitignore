@@ -1,98 +1,50 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
-
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
 # -----------------
-# Flutter & Dart
+# Flutter (in foundit_app/)
 # -----------------
-.dart_tool/
-.packages
-.pub-cache/
-build/
-.flutter-plugins
-.flutter-plugins-dependencies
-.flutter-versions
-.idea/
-android/.gradle/
-android/local.properties
-ios/Pods/
-ios/.symlinks/
-ios/Flutter/Flutter.framework
-ios/Flutter/Flutter.podspec
-macos/Pods/
-macos/.symlinks/
-macos/Flutter/GeneratedPluginRegistrant.swift
-
-# IntelliJ / VS Code
-.vscode/
-*.iml
+foundit_app/.dart_tool/
+foundit_app/.packages
+foundit_app/.pub-cache/
+foundit_app/build/
+foundit_app/.flutter-plugins
+foundit_app/.flutter-plugins-dependencies
+foundit_app/.flutter-versions
+foundit_app/android/.gradle/
+foundit_app/android/local.properties
+foundit_app/ios/Pods/
+foundit_app/ios/.symlinks/
+foundit_app/ios/Flutter/Flutter.framework
+foundit_app/ios/Flutter/Flutter.podspec
+foundit_app/macos/Pods/
+foundit_app/macos/.symlinks/
+foundit_app/macos/Flutter/GeneratedPluginRegistrant.swift
+foundit_app/.idea/
+foundit_app/.vscode/
+foundit_app/*.iml
 
 # App signing
-*.jks
-*.keystore
-*.pem
-*.key
-*.p12
+foundit_app/*.jks
+foundit_app/*.keystore
+foundit_app/*.pem
+foundit_app/*.key
+foundit_app/*.p12
 
 # -----------------
-# Python & AI module
+# Python (MiniLM/)
 # -----------------
 MiniLM/__pycache__/
-*.pyc
-*.pyo
-*.pyd
-env/
-venv/
-ENV/
-__pycache__/
-*.ipynb_checkpoints
+MiniLM/*.pyc
+MiniLM/*.pyo
+MiniLM/*.pyd
+MiniLM/env/
+MiniLM/venv/
+MiniLM/ENV/
+MiniLM/.ipynb_checkpoints
 
 # Pipenv
-Pipfile.lock
+MiniLM/Pipfile.lock
 
 # -----------------
-# Text, Word, and Temporary Files
+# General / Docs / Temporary Files
 # -----------------
 *.docx
 *.doc
@@ -106,3 +58,6 @@ Thumbs.db
 # -----------------
 *.swp
 *.swo
+
+
+.metadata
