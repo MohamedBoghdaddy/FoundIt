@@ -43,3 +43,66 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+# -----------------
+# Flutter & Dart
+# -----------------
+.dart_tool/
+.packages
+.pub-cache/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.flutter-versions
+.idea/
+android/.gradle/
+android/local.properties
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+macos/Pods/
+macos/.symlinks/
+macos/Flutter/GeneratedPluginRegistrant.swift
+
+# IntelliJ / VS Code
+.vscode/
+*.iml
+
+# App signing
+*.jks
+*.keystore
+*.pem
+*.key
+*.p12
+
+# -----------------
+# Python & AI module
+# -----------------
+MiniLM/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+ENV/
+__pycache__/
+*.ipynb_checkpoints
+
+# Pipenv
+Pipfile.lock
+
+# -----------------
+# Text, Word, and Temporary Files
+# -----------------
+*.docx
+*.doc
+*.tmp
+*.log
+*.DS_Store
+Thumbs.db
+
+# -----------------
+# System
+# -----------------
+*.swp
+*.swo
