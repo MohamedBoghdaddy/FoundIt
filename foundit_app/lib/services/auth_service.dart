@@ -49,4 +49,18 @@ class AuthService {
     final random = Random();
     return (100000 + random.nextInt(900000)).toString();
   }
+    /// 🔓 Login user with email and password
+  Future<void> loginUser(String email, String password) async {
+    await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+  }
+Future<void> logoutUser() async {
+  await _auth.signOut();
 }
+
+}
+
+
+
