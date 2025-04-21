@@ -60,7 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SnackBar(content: Text("Login Successful")),
                             );
 
-                            // TODO: Navigate to home screen
+                            Navigator.pushReplacementNamed(context, '/home');
                           } catch (e) {
                             if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(

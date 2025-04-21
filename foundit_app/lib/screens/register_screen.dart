@@ -146,7 +146,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             content: Text("Registered Successfully")),
                       );
 
-                      // TODO: Navigate to login or home page
+                      Navigator.pushReplacementNamed(context, '/home');
                     } catch (e) {
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
