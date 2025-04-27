@@ -218,7 +218,7 @@ class HomePage extends StatelessWidget {
     final user = FirebaseAuth.instance.currentUser;
     final userId = user?.uid ?? '';
     final displayName = user?.email ?? 'User';
-    final _controller = TextEditingController();
+    final controller = TextEditingController();
 
     showModalBottomSheet(
       context: context,
@@ -260,12 +260,12 @@ class HomePage extends StatelessWidget {
                                   IconButton(
                                     icon: const Icon(Icons.edit),
                                     onPressed: () {
-                                      _controller.text = data['content'];
+                                      controller.text = data['content'];
                                       showDialog(
                                         context: context,
                                         builder: (_) => AlertDialog(
                                           title: const Text("Edit Comment"),
-                                          content: TextField(controller: _controller),
+                                          content: TextField(controller: controller),
                                           actions: [
                                             TextButton(
                                               onPressed: () async {
@@ -275,7 +275,7 @@ class HomePage extends StatelessWidget {
                                                     .collection('comments')
                                                     .doc(doc.id)
                                                     .update({
-                                                  'content': _controller.text.trim(),
+                                                  'content': controller.text.trim(),
                                                 });
                                                 Navigator.pop(context);
                                               },
@@ -312,14 +312,14 @@ class HomePage extends StatelessWidget {
                 children: [
                   Expanded(
                     child: TextField(
-                      controller: _controller,
+                      controller: controller,
                       decoration: const InputDecoration(hintText: "Write a comment..."),
                     ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.send),
                     onPressed: () async {
-                      final text = _controller.text.trim();
+                      final text = controller.text.trim();
                       if (text.isEmpty) return;
                       await FirebaseFirestore.instance
                           .collection('posts')
@@ -331,7 +331,7 @@ class HomePage extends StatelessWidget {
                         'content': text,
                         'timestamp': Timestamp.now(),
                       });
-                      _controller.clear();
+                      controller.clear();
                     },
                   )
                 ],

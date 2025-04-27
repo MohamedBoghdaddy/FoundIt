@@ -1,9 +1,14 @@
 buildscript {
+    repositories {
+        google()  // Add this line
+        mavenCentral()
+    }
     dependencies {
-        // 🔥 Firebase plugin
+        classpath 'com.android.tools.build:gradle:7.0.0'
         classpath 'com.google.gms:google-services:4.4.2'
     }
 }
+
 
 allprojects {
     repositories {
@@ -23,3 +28,6 @@ subprojects {
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
+
+
+apply plugin: 'com.google.gms.google-services'
