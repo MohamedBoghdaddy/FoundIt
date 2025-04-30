@@ -1,7 +1,89 @@
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:stream_chat_flutter/stream_chat_flutter.dart';
+import 'questionnaire_screen.dart';
 import 'edit_post_screen.dart';
+
+class FirebaseService {
+  static final _firestore = FirebaseFirestore.instance;
+
+  // Fetches the questions for the questionnaire
+  static Future<List<String>> getQuestions(String questionnaireId) async {
+    final doc = await _firestore
+        .collection('questionnaires')
+        .doc(questionnaireId)
+        .get();
+    if (doc.exists && doc.data() != null) {
+      return List<String>.from(doc['questions']);
+    } else {
+      throw Exception("Questionnaire not found");
+    }
+  }
+
+  // Submits answers and calculates score
+  static Future<int> submitAnswers(
+      String questionnaireId, List<String> answers) async {
+    final doc = await _firestore
+        .collection('questionnaires')
+        .doc(questionnaireId)
+        .get();
+    final correctAnswers = List<String>.from(doc['correctAnswers']);
+    int score = 0;
+
+    for (int i = 0; i < answers.length; i++) {
+      if (answers[i].trim().toLowerCase() ==
+          correctAnswers[i].trim().toLowerCase()) {
+        score++;
+      }
+    }
+
+    await _firestore
+        .collection('questionnaires')
+        .doc(questionnaireId)
+        .collection('responses')
+        .add({
+      'respondentId': FirebaseAuth.instance.currentUser?.uid,
+      'answers': answers,
+      'score': score,
+      'timestamp': Timestamp.now(),
+      'status': 'pending',
+    });
+
+    return score;
+  }
+
+  // Fetches image URL of the post
+  static Future<String> getImageUrl(String postId) async {
+    final postDoc = await _firestore.collection('posts').doc(postId).get();
+    return postDoc['imageUrl'] ?? '';
+  }
+
+  // Fetches the owner of the post
+  static Future<String?> getPostOwner(String postId) async {
+    final postDoc = await _firestore.collection('posts').doc(postId).get();
+    return postDoc['userId'];
+  }
+
+  // Fetches the type of the post (lost or found)
+  static Future<String> getPostType(String postId) async {
+    final postDoc = await _firestore.collection('posts').doc(postId).get();
+    return postDoc['type'];
+  }
+
+  // Fetches the upvotes count of a post
+  static Future<int> getUpvotes(String postId) async {
+    final reactionsSnapshot = await _firestore
+        .collection('posts')
+        .doc(postId)
+        .collection('reactions')
+        .get();
+    return reactionsSnapshot.docs
+        .where((doc) => doc['reaction'] == 'upvote')
+        .length;
+  }
+}
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -25,7 +107,6 @@ class HomePage extends StatelessWidget {
       Future.microtask(() {
         Navigator.pushReplacementNamed(context, '/login');
       });
-
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
@@ -33,9 +114,7 @@ class HomePage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("FoundIt Feed"),
-        automaticallyImplyLeading: false,
-      ),
+          title: const Text("FoundIt Feed"), automaticallyImplyLeading: false),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: 0,
         onTap: (index) {
@@ -45,7 +124,8 @@ class HomePage extends StatelessWidget {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -80,12 +160,18 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  Widget _buildPostCard(BuildContext context, Map<String, dynamic> post, String postId) {
+  Widget _buildPostCard(
+      BuildContext context, Map<String, dynamic> post, String postId) {
     final currentUser = FirebaseAuth.instance.currentUser;
     final currentUserId = currentUser?.uid ?? '';
     final displayName = currentUser?.email ?? 'User';
     final timestamp = (post['timestamp'] as Timestamp).toDate();
     final imageUrl = post['imageUrl'] as String?;
+    final postType = post['type']; // 'lost' or 'found'
+    final postOwner = post['userId']; // Post owner's user ID
+
+    final showQuestionnaireButton =
+        postType == 'lost' && postOwner != currentUserId;
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -99,24 +185,31 @@ class HomePage extends StatelessWidget {
 
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 8),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (_isValidImageUrl(imageUrl))
                 ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(12)),
                   child: Image.network(
                     imageUrl!,
                     fit: BoxFit.cover,
                     width: double.infinity,
                     height: 200,
-                    errorBuilder: (context, error, stackTrace) => const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(12),
-                        child: Text("⚠️ Image failed to load", style: TextStyle(color: Colors.red)),
-                      ),
-                    ),
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Center(
+                        child: CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? (loadingProgress.cumulativeBytesLoaded /
+                                  (loadingProgress.expectedTotalBytes ?? 1))
+                              : null,
+                        ),
+                      );
+                    },
                   ),
                 ),
               Padding(
@@ -128,7 +221,8 @@ class HomePage extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(post['title'] ?? '',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 18)),
                         ),
                         if (post['userId'] == currentUserId)
                           Row(
@@ -140,9 +234,7 @@ class HomePage extends StatelessWidget {
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) => EditPostScreen(
-                                        postId: postId,
-                                        postData: post,
-                                      ),
+                                          postId: postId, postData: post),
                                     ),
                                   );
                                 },
@@ -155,16 +247,18 @@ class HomePage extends StatelessWidget {
                                       .doc(postId)
                                       .delete();
                                 },
-                              )
+                              ),
                             ],
-                          )
+                          ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(post['description'] ?? ''),
                     const SizedBox(height: 4),
-                    Text("📍 ${post['location']}   •   🕒 ${_formatTimeAgo(timestamp)}",
-                        style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                    Text(
+                        "📍 ${post['location']}   •   🕒 ${_formatTimeAgo(timestamp)}",
+                        style:
+                            const TextStyle(color: Colors.grey, fontSize: 12)),
                   ],
                 ),
               ),
@@ -175,35 +269,33 @@ class HomePage extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     TextButton.icon(
-                      icon: Icon(
-                        hasReacted ? Icons.favorite : Icons.favorite_border,
-                        color: hasReacted ? Colors.red : null,
-                      ),
-                      label: Text("React (${reactions.length})"),
+                      icon: const Icon(Icons.thumb_up_alt_outlined),
+                      label: const Text("Upvote"),
                       onPressed: () async {
-                        final reactionRef = FirebaseFirestore.instance
-                            .collection('posts')
-                            .doc(postId)
-                            .collection('reactions')
-                            .doc(currentUserId);
-
-                        final doc = await reactionRef.get();
-                        if (doc.exists) {
-                          await reactionRef.delete();
-                        } else {
-                          await reactionRef.set({
-                            'userId': currentUserId,
-                            'displayName': displayName,
-                            'timestamp': Timestamp.now(),
-                          });
-                        }
+                        await _toggleUpvote(postId);
                       },
                     ),
                     TextButton.icon(
-                      icon: const Icon(Icons.comment_outlined),
-                      label: const Text("Comment"),
-                      onPressed: () => _openComments(context, postId),
+                      icon: const Icon(Icons.thumb_down_alt_outlined),
+                      label: const Text("Downvote"),
+                      onPressed: () async {
+                        await _toggleDownvote(postId);
+                      },
                     ),
+                    if (showQuestionnaireButton)
+                      TextButton.icon(
+                        icon: const Icon(Icons.assignment_outlined),
+                        label: const Text("Fill Questionnaire"),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => QuestionnaireScreen(
+                                  questionnaireId: postId, postId: postId),
+                            ),
+                          );
+                        },
+                      ),
                   ],
                 ),
               ),
@@ -214,133 +306,44 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  void _openComments(BuildContext context, String postId) {
-    final user = FirebaseAuth.instance.currentUser;
-    final userId = user?.uid ?? '';
-    final displayName = user?.email ?? 'User';
-    final controller = TextEditingController();
+  Future<void> _toggleUpvote(String postId) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final userId = currentUser?.uid;
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Text("Comments", style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-            StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('posts')
-                  .doc(postId)
-                  .collection('comments')
-                  .orderBy('timestamp', descending: true)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const CircularProgressIndicator();
-                final comments = snapshot.data!.docs;
+    if (userId != null) {
+      final reactionRef = FirebaseFirestore.instance
+          .collection('posts')
+          .doc(postId)
+          .collection('reactions')
+          .doc(userId);
+      final doc = await reactionRef.get();
 
-                return SizedBox(
-                  height: 300,
-                  child: ListView(
-                    children: comments.map((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      return ListTile(
-                        title: Text(data['displayName'] ?? 'User'),
-                        subtitle: Text(data['content'] ?? ''),
-                        trailing: data['userId'] == userId
-                            ? Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit),
-                                    onPressed: () {
-                                      controller.text = data['content'];
-                                      showDialog(
-                                        context: context,
-                                        builder: (_) => AlertDialog(
-                                          title: const Text("Edit Comment"),
-                                          content: TextField(controller: controller),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () async {
-                                                await FirebaseFirestore.instance
-                                                    .collection('posts')
-                                                    .doc(postId)
-                                                    .collection('comments')
-                                                    .doc(doc.id)
-                                                    .update({
-                                                  'content': controller.text.trim(),
-                                                });
-                                                Navigator.pop(context);
-                                              },
-                                              child: const Text("Save"),
-                                            )
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete),
-                                    onPressed: () async {
-                                      await FirebaseFirestore.instance
-                                          .collection('posts')
-                                          .doc(postId)
-                                          .collection('comments')
-                                          .doc(doc.id)
-                                          .delete();
-                                    },
-                                  ),
-                                ],
-                              )
-                            : null,
-                      );
-                    }).toList(),
-                  ),
-                );
-              },
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      decoration: const InputDecoration(hintText: "Write a comment..."),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.send),
-                    onPressed: () async {
-                      final text = controller.text.trim();
-                      if (text.isEmpty) return;
-                      await FirebaseFirestore.instance
-                          .collection('posts')
-                          .doc(postId)
-                          .collection('comments')
-                          .add({
-                        'userId': userId,
-                        'displayName': displayName,
-                        'content': text,
-                        'timestamp': Timestamp.now(),
-                      });
-                      controller.clear();
-                    },
-                  )
-                ],
-              ),
-            )
-          ]),
-        );
-      },
-    );
+      if (doc.exists) {
+        await reactionRef.update({'reaction': 'upvote'});
+      } else {
+        await reactionRef.set({'reaction': 'upvote', 'userId': userId});
+      }
+    }
+  }
+
+  Future<void> _toggleDownvote(String postId) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final userId = currentUser?.uid;
+
+    if (userId != null) {
+      final reactionRef = FirebaseFirestore.instance
+          .collection('posts')
+          .doc(postId)
+          .collection('reactions')
+          .doc(userId);
+      final doc = await reactionRef.get();
+
+      if (doc.exists) {
+        await reactionRef.update({'reaction': 'downvote'});
+      } else {
+        await reactionRef.set({'reaction': 'downvote', 'userId': userId});
+      }
+    }
   }
 
   String _formatTimeAgo(DateTime dateTime) {
