@@ -42,11 +42,18 @@ class FirebaseService {
 
     return score;
   }
+
+  static Future<String> getImageUrl(String postId) async {
+    final postDoc = await _firestore.collection('posts').doc(postId).get();
+    return postDoc['imageUrl'] ?? '';
+  }
 }
 
 class QuestionnaireScreen extends StatefulWidget {
   final String questionnaireId;
-  const QuestionnaireScreen({super.key, required this.questionnaireId});
+  final String postId;
+  const QuestionnaireScreen(
+      {super.key, required this.questionnaireId, required this.postId});
 
   @override
   State<QuestionnaireScreen> createState() => _QuestionnaireScreenState();
@@ -55,16 +62,23 @@ class QuestionnaireScreen extends StatefulWidget {
 class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
   List<String> questions = [];
   List<String> answers = [];
+  String? imageUrl;
 
   @override
   void initState() {
     super.initState();
     fetchQuestions();
+    fetchImage();
   }
 
   void fetchQuestions() async {
     questions = await FirebaseService.getQuestions(widget.questionnaireId);
     answers = List.filled(questions.length, '');
+    setState(() {});
+  }
+
+  void fetchImage() async {
+    imageUrl = await FirebaseService.getImageUrl(widget.postId);
     setState(() {});
   }
 
@@ -78,37 +92,43 @@ class _QuestionnaireScreenState extends State<QuestionnaireScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text("Item Verification")),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: questions.length,
-        itemBuilder: (context, index) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              questions[index],
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+      body: Column(
+        children: [
+          if (imageUrl != null) Image.network(imageUrl!),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: questions.length,
+              itemBuilder: (context, index) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    questions[index],
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  TextFormField(
+                    onChanged: (val) => answers[index] = val,
+                    decoration: const InputDecoration(hintText: "Your Answer"),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
             ),
-            TextFormField(
-              onChanged: (val) => answers[index] = val,
-              decoration: const InputDecoration(hintText: "Your Answer"),
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        label: const Text("Submit"),
-        icon: const Icon(Icons.send),
-        onPressed: () async {
-          final score = await FirebaseService.submitAnswers(
-            widget.questionnaireId,
-            answers,
-          );
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Submitted! Your score: \$score")),
-          );
-        },
+          ),
+          FloatingActionButton.extended(
+            label: const Text("Submit"),
+            icon: const Icon(Icons.send),
+            onPressed: () async {
+              final score = await FirebaseService.submitAnswers(
+                  widget.questionnaireId, answers);
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("Submitted! Your score: $score")),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
