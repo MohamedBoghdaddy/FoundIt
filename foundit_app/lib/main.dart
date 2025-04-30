@@ -9,6 +9,7 @@ import 'screens/home.dart';
 import 'screens/login.dart';
 import 'screens/register_screen.dart';
 import 'screens/profile_page.dart';
+import 'screens/questionnaire_screen.dart'; // Import the questionnaire screen
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -114,6 +115,10 @@ class MyApp extends StatelessWidget {
         '/createPost': (context) => const CreatePostScreen(),
         '/profile': (context) => const ProfilePage(),
         '/editPost': (context) => const Placeholder(),
+        '/questionnaire': (context) => QuestionnaireScreen(
+              questionnaireId: '', // Pass the actual questionnaireId here
+              postId: '', // Pass the actual postId here
+            ), // Add the route for the questionnaire screen
       },
     );
   }
