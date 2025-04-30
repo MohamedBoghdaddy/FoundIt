@@ -3,8 +3,19 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'edit_post_screen.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
+
+  @override
+  _ProfilePageState createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  @override
+  void initState() {
+    super.initState();
+    debugPrint("⚡ ProfilePage Loaded");
+  }
 
   Stream<QuerySnapshot> getUserPosts() {
     final userId = FirebaseAuth.instance.currentUser?.uid;
@@ -13,6 +24,7 @@ class ProfilePage extends StatelessWidget {
       return const Stream.empty();
     }
 
+    // Get posts where userId matches the current user
     return FirebaseFirestore.instance
         .collection('posts')
         .where('userId', isEqualTo: userId)
@@ -38,7 +50,8 @@ class ProfilePage extends StatelessWidget {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -55,6 +68,11 @@ class ProfilePage extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
+          // Debug logs
+          if (snapshot.hasError) {
+            debugPrint("⚠️ Error fetching posts: ${snapshot.error}");
+          }
+
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return const Center(
               child: Text("You haven’t posted anything yet."),
@@ -62,7 +80,6 @@ class ProfilePage extends StatelessWidget {
           }
 
           final posts = snapshot.data!.docs;
-
           debugPrint("✅ Posts found: ${posts.length}");
 
           return ListView(
@@ -77,7 +94,8 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _buildPostCard(BuildContext context, Map<String, dynamic> post, String postId) {
+  Widget _buildPostCard(
+      BuildContext context, Map<String, dynamic> post, String postId) {
     final timestamp = (post['timestamp'] as Timestamp).toDate();
 
     return Card(
@@ -89,7 +107,8 @@ class ProfilePage extends StatelessWidget {
           if (post['imageUrl'] != null &&
               post['imageUrl'].toString().startsWith('http'))
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(16)),
               child: Image.network(
                 post['imageUrl'],
                 fit: BoxFit.cover,
