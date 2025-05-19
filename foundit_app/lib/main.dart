@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
-import 'package:stream_chat_flutter/stream_chat_flutter.dart';
 
+import 'screens/channel_list_screen.dart';
 import 'screens/homepage.dart';
 import 'screens/create_post.dart';
 import 'screens/home.dart';
 import 'screens/login.dart';
 import 'screens/register_screen.dart';
 import 'screens/profile_page.dart';
-import 'screens/questionnaire_screen.dart'; // Import the questionnaire screen
+import 'screens/questionnaire_screen.dart';
+import 'screens/chat_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,23 +26,11 @@ void main() async {
     ),
   );
 
-  final client = StreamChatClient(
-    'b67pax5b2wdq',
-    logLevel: Level.INFO,
-  );
-
-  await client.connectUser(
-    User(id: 'tutorial-flutter'),
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoidHV0b3JpYWwtZmx1dHRlciJ9.S-MJpoSwDiqyXpUURgO5wVqJ4vKlIVFLSEyrFYCOE1c',
-  );
-
-  runApp(MyApp(client: client));
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  final StreamChatClient client;
-
-  const MyApp({super.key, required this.client});
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -78,33 +67,10 @@ class MyApp extends StatelessWidget {
       useMaterial3: true,
     );
 
-    final streamChatTheme = StreamChatThemeData.fromTheme(themeData).merge(
-      StreamChatThemeData(
-        channelPreviewTheme: StreamChannelPreviewThemeData(
-          avatarTheme: StreamAvatarThemeData(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
-        ownMessageTheme: StreamMessageThemeData(
-          messageBackgroundColor: Colors.blue.shade300,
-          messageTextStyle: const TextStyle(color: Colors.white),
-        ),
-        otherMessageTheme: StreamMessageThemeData(
-          messageBackgroundColor: Colors.blue.shade100,
-          messageTextStyle: const TextStyle(color: Colors.black),
-        ),
-      ),
-    );
-
     return MaterialApp(
       title: 'FoundIt App',
       debugShowCheckedModeBanner: false,
       theme: themeData,
-      builder: (context, child) => StreamChat(
-        client: client,
-        streamChatThemeData: streamChatTheme,
-        child: child,
-      ),
       initialRoute: '/',
       routes: {
         '/': (context) => const SplashScreenRedirect(),
@@ -116,9 +82,10 @@ class MyApp extends StatelessWidget {
         '/profile': (context) => const ProfilePage(),
         '/editPost': (context) => const Placeholder(),
         '/questionnaire': (context) => QuestionnaireScreen(
-              questionnaireId: '', // Pass the actual questionnaireId here
-              postId: '', // Pass the actual postId here
-            ), // Add the route for the questionnaire screen
+              questionnaireId: '',
+              postId: '',
+            ),
+        '/channels': (context) => const ChannelListScreen(),
       },
     );
   }
@@ -133,29 +100,12 @@ class SplashScreenRedirect extends StatelessWidget {
       if (firebase_auth.FirebaseAuth.instance.currentUser == null) {
         Navigator.pushReplacementNamed(context, '/welcome');
       } else {
-        Navigator.pushReplacementNamed(context, '/home');
+        Navigator.pushReplacementNamed(context, '/channels');  // غيرتها تدخل قائمة المحادثات
       }
     });
 
     return const Scaffold(
       body: Center(child: Text("FoundIt", style: TextStyle(fontSize: 24))),
-    );
-  }
-}
-
-class ChannelPage extends StatelessWidget {
-  const ChannelPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: const StreamChannelHeader(),
-      body: Column(
-        children: const [
-          Expanded(child: StreamMessageListView()),
-          StreamMessageInput(),
-        ],
-      ),
     );
   }
 }

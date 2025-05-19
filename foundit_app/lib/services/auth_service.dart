@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -15,10 +17,7 @@ class AuthService {
       'timestamp': FieldValue.serverTimestamp(),
     });
 
-    // DEV: Show in console
     print('Generated OTP for $email: $otp');
-
-    // PRODUCTION: Trigger backend email service or Firebase Function
   }
 
   /// 📩 Verify OTP stored in Firestore
@@ -30,8 +29,24 @@ class AuthService {
     return savedOtp == inputOtp;
   }
 
-  /// ✅ Register user and store role flags
-  Future<void> registerUser(String email, String password) async {
+  /// ✅ Upload profile image to Firebase Storage
+  Future<String> uploadProfileImage(File imageFile, String userId) async {
+    final storageRef =
+        FirebaseStorage.instance.ref().child('profile_images/$userId.jpg');
+    final uploadTask = storageRef.putFile(imageFile);
+    final snapshot = await uploadTask.whenComplete(() {});
+    final downloadUrl = await snapshot.ref.getDownloadURL();
+    return downloadUrl;
+  }
+
+  /// ✅ Register user and store role flags plus profile image URL
+  Future<void> registerUser(
+    String email,
+    String password,
+    String firstName,
+    String lastName, {
+    String? imageUrl,
+  }) async {
     final credential = await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
@@ -41,7 +56,10 @@ class AuthService {
       'email': email,
       'roles': {'finder': true, 'seeker': true},
       'createdAt': Timestamp.now(),
-    });
+      'firstName': firstName,
+      'lastName': lastName,
+      'imageUrl': imageUrl ?? 'https://cdn-icons-png.flaticon.com/512/149/149071.png',
+ });
   }
 
   /// 🔁 Generate 6-digit OTP
@@ -49,18 +67,16 @@ class AuthService {
     final random = Random();
     return (100000 + random.nextInt(900000)).toString();
   }
-    /// 🔓 Login user with email and password
+
+  /// 🔓 Login user with email and password
   Future<void> loginUser(String email, String password) async {
     await _auth.signInWithEmailAndPassword(
       email: email,
       password: password,
     );
   }
-Future<void> logoutUser() async {
-  await _auth.signOut();
+
+  Future<void> logoutUser() async {
+    await _auth.signOut();
+  }
 }
-
-}
-
-
-

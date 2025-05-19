@@ -1,5 +1,9 @@
 import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../services/auth_service.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -13,9 +17,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _authService = AuthService();
 
+  String firstName = '';
+  String lastName = '';
   String email = '';
   String password = '';
   String otp = '';
+
+  File? _profileImage;
+  final ImagePicker _picker = ImagePicker();
 
   bool otpSent = false;
   bool otpVerified = false;
@@ -46,6 +55,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
+  Future<void> _pickImage() async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      setState(() {
+        _profileImage = File(image.path);
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -56,6 +74,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
           key: _formKey,
           child: ListView(
             children: [
+              Center(
+                child: GestureDetector(
+                  onTap: _pickImage,
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundImage:
+                        _profileImage != null ? FileImage(_profileImage!) : null,
+                    child: _profileImage == null
+                        ? const Icon(Icons.camera_alt, size: 50)
+                        : null,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              TextFormField(
+                decoration: const InputDecoration(labelText: "First Name"),
+                validator: (val) =>
+                    val != null && val.trim().isNotEmpty ? null : "Enter first name",
+                onChanged: (val) => firstName = val.trim(),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                decoration: const InputDecoration(labelText: "Last Name"),
+                validator: (val) =>
+                    val != null && val.trim().isNotEmpty ? null : "Enter last name",
+                onChanged: (val) => lastName = val.trim(),
+              ),
+              const SizedBox(height: 10),
               TextFormField(
                 decoration: const InputDecoration(labelText: "MIU Email"),
                 validator: (val) =>
@@ -137,8 +183,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
               if (otpVerified)
                 ElevatedButton(
                   onPressed: () async {
+                    if (!_formKey.currentState!.validate()) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Please fill all fields")),
+                      );
+                      return;
+                    }
                     try {
-                      await _authService.registerUser(email, password);
+                      String? imageUrl;
+                      if (_profileImage != null) {
+                        imageUrl = await _authService.uploadProfileImage(
+                            _profileImage!, email);
+                      }
+                      await _authService.registerUser(
+                        email,
+                        password,
+                        firstName,
+                        lastName,
+                        imageUrl: imageUrl,
+                      );
 
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(

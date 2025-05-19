@@ -3,17 +3,15 @@ import 'package:flutter/material.dart';
 class MainScaffold extends StatelessWidget {
   final int selectedIndex;
   final Widget body;
-  final BuildContext context;
 
   const MainScaffold({
     super.key,
     required this.selectedIndex,
     required this.body,
-    required this.context,
   });
 
   @override
-  Widget build(BuildContext _) {
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text("FoundIt Feed"),
@@ -24,8 +22,8 @@ class MainScaffold extends StatelessWidget {
         currentIndex: selectedIndex,
         onTap: (index) {
           if (index == 0) Navigator.pushReplacementNamed(context, '/home');
-          if (index == 1) Navigator.pushReplacementNamed(context, '/profile');
-          if (index == 2) Navigator.pushReplacementNamed(context, '/chat');
+          else if (index == 1) Navigator.pushReplacementNamed(context, '/profile');
+          else if (index == 2) Navigator.pushReplacementNamed(context, '/channels');
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
