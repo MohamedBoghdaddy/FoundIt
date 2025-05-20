@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
+import 'package:collection/collection.dart';
 import 'chat_screen.dart';
 
 class ChannelListScreen extends StatefulWidget {
@@ -78,6 +79,85 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
                 },
               );
             },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.add),
+        onPressed: () => _showUserSelection(),
+      ),
+    );
+  }
+
+  void _showUserSelection() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const UserSelectionScreen()),
+    );
+  }
+}
+
+class UserSelectionScreen extends StatelessWidget {
+  const UserSelectionScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final currentUser = fb_auth.FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null) {
+      return const Scaffold(
+        body: Center(child: Text('Please login first')),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Select User')),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('users').snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('No users found.'));
+          }
+
+          final users = snapshot.data!.docs
+              .where((u) => u.id != currentUser.uid)
+              .toList();
+
+          return ListView(
+            children: users.map((doc) {
+              final userData = doc.data() as Map<String, dynamic>;
+              return ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.person)),
+                title: Text(userData['displayName'] ?? 'Unknown'),
+                subtitle: Text(userData['email'] ?? ''),
+                onTap: () async {
+                  final chatRef = FirebaseFirestore.instance.collection('chats');
+                  final existingChats = await chatRef
+                      .where('userIds', arrayContains: currentUser.uid)
+                      .get();
+
+                  final selectedUserId = doc.id;
+
+                  final existingChat = existingChats.docs.firstWhereOrNull((chatDoc) {
+                    final userIds = chatDoc['userIds'] as List<dynamic>;
+                    return userIds.contains(selectedUserId);
+                  });
+
+                  if (existingChat == null) {
+                    await chatRef.add({
+                      'userIds': [currentUser.uid, selectedUserId],
+                      'createdAt': FieldValue.serverTimestamp(),
+                      'lastMessage': '',
+                    });
+                  }
+
+                  Navigator.pop(context);
+                },
+              );
+            }).toList(),
           );
         },
       ),
