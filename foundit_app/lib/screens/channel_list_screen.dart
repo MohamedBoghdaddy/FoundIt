@@ -17,9 +17,7 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
   final fb_auth.User? firebaseUser = fb_auth.FirebaseAuth.instance.currentUser;
 
   Stream<QuerySnapshot> _getUserChats() {
-    if (firebaseUser == null) {
-      return const Stream.empty();
-    }
+    if (firebaseUser == null) return const Stream.empty();
     return _firestore
         .collection('chats')
         .where('userIds', arrayContains: firebaseUser!.uid)
@@ -129,32 +127,51 @@ class UserSelectionScreen extends StatelessWidget {
           return ListView(
             children: users.map((doc) {
               final userData = doc.data() as Map<String, dynamic>;
+              final displayName = userData['displayName'] ??
+                  '${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}'.trim();
+
               return ListTile(
                 leading: const CircleAvatar(child: Icon(Icons.person)),
-                title: Text(userData['displayName'] ?? 'Unknown'),
+                title: Text(displayName.isNotEmpty ? displayName : 'Unknown'),
                 subtitle: Text(userData['email'] ?? ''),
                 onTap: () async {
                   final chatRef = FirebaseFirestore.instance.collection('chats');
-                  final existingChats = await chatRef
+                  final selectedUserId = doc.id;
+                  final selectedUser = types.User(id: selectedUserId);
+                  final currentUserTyped = types.User(id: currentUser.uid);
+
+                  // Check for existing chat
+                  final possibleChats = await chatRef
                       .where('userIds', arrayContains: currentUser.uid)
                       .get();
 
-                  final selectedUserId = doc.id;
-
-                  final existingChat = existingChats.docs.firstWhereOrNull((chatDoc) {
-                    final userIds = chatDoc['userIds'] as List<dynamic>;
-                    return userIds.contains(selectedUserId);
+                  final existingChat = possibleChats.docs.firstWhereOrNull((chatDoc) {
+                    final userIds = List<String>.from(chatDoc['userIds']);
+                    return userIds.contains(selectedUserId) && userIds.length == 2;
                   });
 
-                  if (existingChat == null) {
-                    await chatRef.add({
+                  String chatId;
+
+                  if (existingChat != null) {
+                    chatId = existingChat.id;
+                  } else {
+                    final newChatDoc = await chatRef.add({
                       'userIds': [currentUser.uid, selectedUserId],
                       'createdAt': FieldValue.serverTimestamp(),
                       'lastMessage': '',
                     });
+                    chatId = newChatDoc.id;
                   }
 
-                  Navigator.pop(context);
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ChatScreen(
+                        chatId: chatId,
+                        currentUser: currentUserTyped,
+                      ),
+                    ),
+                  );
                 },
               );
             }).toList(),

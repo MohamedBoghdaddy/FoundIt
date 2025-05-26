@@ -115,11 +115,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 decoration: const InputDecoration(labelText: "Location"),
                 items: const [
                   DropdownMenuItem(
-                      value: "S-Building", child: Text("S-Building")),
+                      value: "main-Building", child: Text("S-Building")),
                   DropdownMenuItem(
-                      value: "B-Building", child: Text("B-Building")),
+                      value: "S-Building", child: Text("B-Building")),
                   DropdownMenuItem(
-                      value: "E-Building", child: Text("E-Building")),
+                      value: "N-Building", child: Text("E-Building")),
                 ],
                 onChanged: (val) => setState(() => _location = val),
                 validator: (val) => val == null ? "Choose location" : null,

@@ -10,7 +10,6 @@ import 'screens/login.dart';
 import 'screens/register_screen.dart';
 import 'screens/profile_page.dart';
 import 'screens/questionnaire_screen.dart';
-import 'screens/chat_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -81,7 +80,7 @@ class MyApp extends StatelessWidget {
         '/createPost': (context) => const CreatePostScreen(),
         '/profile': (context) => const ProfilePage(),
         '/editPost': (context) => const Placeholder(),
-        '/questionnaire': (context) => QuestionnaireScreen(
+        '/questionnaire': (context) => const QuestionnaireScreen(
               questionnaireId: '',
               postId: '',
             ),

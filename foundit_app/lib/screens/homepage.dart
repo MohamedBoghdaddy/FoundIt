@@ -119,7 +119,7 @@ class HomePage extends StatelessWidget {
         currentIndex: 0,
         onTap: (index) {
           if (index == 1) Navigator.pushNamed(context, '/profile');
-          if (index == 2) Navigator.pushNamed(context, '/chat');
+          if (index == 2) Navigator.pushNamed(context, '/channels');
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),

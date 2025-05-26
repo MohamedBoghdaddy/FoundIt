@@ -21,8 +21,9 @@ class MainScaffold extends StatelessWidget {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: selectedIndex,
         onTap: (index) {
-          if (index == 0) Navigator.pushReplacementNamed(context, '/home');
-          else if (index == 1) Navigator.pushReplacementNamed(context, '/profile');
+          if (index == 0) {
+            Navigator.pushReplacementNamed(context, '/home');
+          } else if (index == 1) Navigator.pushReplacementNamed(context, '/profile');
           else if (index == 2) Navigator.pushReplacementNamed(context, '/channels');
         },
         items: const [
