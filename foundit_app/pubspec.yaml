@@ -22,7 +22,12 @@ dependencies:
   flutter_chat_core: ^0.0.6  # ✅ compatible version
   provider: ^6.1.5
   collection: 1.18.0         # ✅ fixed version
-  chewie: ^1.7.0
+  chewie: 1.8.1
+
+
+
+
+
 
 dev_dependencies:
   flutter_test:
