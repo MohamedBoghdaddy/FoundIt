@@ -1,120 +1,306 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:stream_chat_flutter/stream_chat_flutter.dart';
-import 'questionnaire_screen.dart';
 import 'edit_post_screen.dart';
+import 'questionnaire_screen.dart';
 
-class FirebaseService {
-  static final _firestore = FirebaseFirestore.instance;
+class FeedPage extends StatefulWidget {
+  const FeedPage({super.key});
 
-  // Fetches the questions for the questionnaire
-  static Future<List<String>> getQuestions(String questionnaireId) async {
-    final doc = await _firestore
-        .collection('questionnaires')
-        .doc(questionnaireId)
+  @override
+  State<FeedPage> createState() => _FeedPageState();
+}
+
+class _FeedPageState extends State<FeedPage>
+    with SingleTickerProviderStateMixin {
+  final ScrollController _scrollController = ScrollController();
+  final int _limitIncrement = 5;
+  int _limit = 5;
+  String _filter = 'all';
+  String _sortBy = 'newest';
+  late AnimationController _animationController;
+  final currentUser = FirebaseAuth.instance.currentUser;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _scrollController.addListener(_scrollListener);
+  }
+
+  void _scrollListener() {
+    if (_scrollController.position.pixels ==
+        _scrollController.position.maxScrollExtent) {
+      setState(() => _limit += _limitIncrement);
+    }
+  }
+
+  Stream<QuerySnapshot> getFilteredPosts() {
+    Query baseQuery = FirebaseFirestore.instance.collection('posts');
+
+    if (_filter != 'all') {
+      baseQuery = baseQuery.where('type', isEqualTo: _filter);
+    }
+
+    baseQuery = _sortBy == 'upvotes'
+        ? baseQuery.orderBy('score', descending: true)
+        : baseQuery.orderBy('timestamp', descending: true);
+
+    return baseQuery.limit(_limit).snapshots();
+  }
+
+  Future<String?> _getUserReaction(String postId) async {
+    final uid = currentUser?.uid;
+    final doc = await FirebaseFirestore.instance
+        .collection('posts')
+        .doc(postId)
+        .collection('reactions')
+        .doc(uid)
         .get();
-    if (doc.exists && doc.data() != null) {
-      return List<String>.from(doc['questions']);
+    return doc.exists ? doc['reaction'] : null;
+  }
+
+  Future<void> _handleVote(String postId, String reaction) async {
+    final uid = currentUser?.uid;
+    if (uid == null) return;
+
+    final ref = FirebaseFirestore.instance
+        .collection('posts')
+        .doc(postId)
+        .collection('reactions')
+        .doc(uid);
+
+    final doc = await ref.get();
+    if (doc.exists && doc['reaction'] == reaction) {
+      await ref.delete();
     } else {
-      throw Exception("Questionnaire not found");
-    }
-  }
-
-  // Submits answers and calculates score
-  static Future<int> submitAnswers(
-      String questionnaireId, List<String> answers) async {
-    final doc = await _firestore
-        .collection('questionnaires')
-        .doc(questionnaireId)
-        .get();
-    final correctAnswers = List<String>.from(doc['correctAnswers']);
-    int score = 0;
-
-    for (int i = 0; i < answers.length; i++) {
-      if (answers[i].trim().toLowerCase() ==
-          correctAnswers[i].trim().toLowerCase()) {
-        score++;
-      }
+      await ref.set({'reaction': reaction, 'userId': uid});
     }
 
-    await _firestore
-        .collection('questionnaires')
-        .doc(questionnaireId)
-        .collection('responses')
-        .add({
-      'respondentId': FirebaseAuth.instance.currentUser?.uid,
-      'answers': answers,
-      'score': score,
-      'timestamp': Timestamp.now(),
-      'status': 'pending',
-    });
-
-    return score;
+    _updatePostScore(postId);
+    _animationController.forward(from: 0.0);
   }
 
-  // Fetches image URL of the post
-  static Future<String> getImageUrl(String postId) async {
-    final postDoc = await _firestore.collection('posts').doc(postId).get();
-    return postDoc['imageUrl'] ?? '';
-  }
-
-  // Fetches the owner of the post
-  static Future<String?> getPostOwner(String postId) async {
-    final postDoc = await _firestore.collection('posts').doc(postId).get();
-    return postDoc['userId'];
-  }
-
-  // Fetches the type of the post (lost or found)
-  static Future<String> getPostType(String postId) async {
-    final postDoc = await _firestore.collection('posts').doc(postId).get();
-    return postDoc['type'];
-  }
-
-  // Fetches the upvotes count of a post
-  static Future<int> getUpvotes(String postId) async {
-    final reactionsSnapshot = await _firestore
+  Future<void> _updatePostScore(String postId) async {
+    final reactions = await FirebaseFirestore.instance
         .collection('posts')
         .doc(postId)
         .collection('reactions')
         .get();
-    return reactionsSnapshot.docs
-        .where((doc) => doc['reaction'] == 'upvote')
-        .length;
-  }
-}
 
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+    final score = reactions.docs.fold(0, (sum, doc) {
+      return sum + (doc['reaction'] == 'upvote' ? 1 : -1);
+    });
 
-  Stream<QuerySnapshot> getPosts() {
-    return FirebaseFirestore.instance
+    await FirebaseFirestore.instance
         .collection('posts')
-        .orderBy('timestamp', descending: true)
-        .snapshots();
+        .doc(postId)
+        .update({'score': score});
   }
 
-  bool _isValidImageUrl(String? url) {
-    return url != null && url.startsWith('http');
+  Widget _buildVoteButton(
+    String postId,
+    String type,
+    String? userReaction,
+    IconData icon,
+    Color activeColor,
+  ) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('posts')
+          .doc(postId)
+          .collection('reactions')
+          .where('reaction', isEqualTo: type)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final count = snapshot.data?.docs.length ?? 0;
+        final isActive = userReaction == type;
+
+        return ScaleTransition(
+          scale: CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeOutBack,
+          ),
+          child: TextButton.icon(
+            onPressed: () => _handleVote(postId, type),
+            style: TextButton.styleFrom(
+              foregroundColor: isActive ? activeColor : Colors.grey,
+            ),
+            icon: Icon(icon, size: 24),
+            label: Text(
+              '$count',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: isActive ? activeColor : Colors.grey[600],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPostCard(
+      Map<String, dynamic> data, String postId, String? userReaction) {
+    final title = data['title'] ?? '';
+    final type = data['type'] ?? 'unknown';
+    final location = data['location'] ?? '';
+    final timestamp = (data['timestamp'] as Timestamp).toDate();
+    final imageUrl = data['imageUrl'] ?? '';
+    final ownerId = data['userId'];
+
+    final showQuestionnaire =
+        type == 'lost' && ownerId != FirebaseAuth.instance.currentUser?.uid;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 5,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (imageUrl.isNotEmpty)
+            ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(16)),
+              child: Image.network(imageUrl,
+                  height: 180, width: double.infinity, fit: BoxFit.cover),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Chip(
+                      label: Text(type.toUpperCase(),
+                          style: const TextStyle(color: Colors.white)),
+                      backgroundColor:
+                          type == 'lost' ? Colors.red : Colors.green,
+                    ),
+                    const Spacer(),
+                    if (ownerId == currentUser?.uid) ...[
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => EditPostScreen(
+                                postId: postId,
+                                postData: data,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete),
+                        onPressed: () async {
+                          await FirebaseFirestore.instance
+                              .collection('posts')
+                              .doc(postId)
+                              .delete();
+                        },
+                      ),
+                    ]
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(title,
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(location),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Text(_formatTimeAgo(timestamp),
+                        style:
+                            const TextStyle(color: Colors.grey, fontSize: 12)),
+                    const Spacer(),
+                    _buildVoteButton(postId, 'upvote', userReaction,
+                        Icons.thumb_up, Colors.blue),
+                    _buildVoteButton(postId, 'downvote', userReaction,
+                        Icons.thumb_down, Colors.red),
+                    if (showQuestionnaire)
+                      TextButton.icon(
+                        icon: const Icon(Icons.assignment_outlined),
+                        label: const Text("Fill Questionnaire"),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => QuestionnaireScreen(
+                                  questionnaireId: postId, postId: postId),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostList() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: getFilteredPosts(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final posts = snapshot.data!.docs;
+
+        return ListView.builder(
+          controller: _scrollController,
+          itemCount: posts.length,
+          itemBuilder: (context, index) {
+            final data = posts[index].data() as Map<String, dynamic>;
+            final postId = posts[index].id;
+            return FutureBuilder<String?>(
+              future: _getUserReaction(postId),
+              builder: (context, snapshot) {
+                final userReaction = snapshot.data;
+                return _buildPostCard(data, postId, userReaction);
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _formatTimeAgo(DateTime time) {
+    final diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      Future.microtask(() {
-        Navigator.pushReplacementNamed(context, '/login');
-      });
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
-          title: const Text("FoundIt Feed"), automaticallyImplyLeading: false),
+        title: const Text("FoundIt Feed"),
+        automaticallyImplyLeading: false,
+        actions: [_buildSortMenu(), _buildFilterMenu()],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: 0,
         onTap: (index) {
@@ -133,223 +319,56 @@ class HomePage extends StatelessWidget {
         backgroundColor: Colors.blue,
         child: const Icon(Icons.add),
       ),
-      body: SafeArea(
-        child: StreamBuilder<QuerySnapshot>(
-          stream: getPosts(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return const Center(child: Text('No posts yet.'));
-            }
-
-            final posts = snapshot.data!.docs;
-
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: posts.map((doc) {
-                final data = doc.data() as Map<String, dynamic>;
-                return _buildPostCard(context, data, doc.id);
-              }).toList(),
-            );
-          },
-        ),
-      ),
+      body: _buildPostList(),
     );
   }
 
-  Widget _buildPostCard(
-      BuildContext context, Map<String, dynamic> post, String postId) {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final currentUserId = currentUser?.uid ?? '';
-    final displayName = currentUser?.email ?? 'User';
-    final timestamp = (post['timestamp'] as Timestamp).toDate();
-    final imageUrl = post['imageUrl'] as String?;
-    final postType = post['type']; // 'lost' or 'found'
-    final postOwner = post['userId']; // Post owner's user ID
-
-    final showQuestionnaireButton =
-        postType == 'lost' && postOwner != currentUserId;
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('posts')
-          .doc(postId)
-          .collection('reactions')
-          .snapshots(),
-      builder: (context, snapshot) {
-        final reactions = snapshot.data?.docs ?? [];
-        final hasReacted = reactions.any((doc) => doc.id == currentUserId);
-
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_isValidImageUrl(imageUrl))
-                ClipRRect(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(12)),
-                  child: Image.network(
-                    imageUrl!,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: 200,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Center(
-                        child: CircularProgressIndicator(
-                          value: loadingProgress.expectedTotalBytes != null
-                              ? (loadingProgress.cumulativeBytesLoaded /
-                                  (loadingProgress.expectedTotalBytes ?? 1))
-                              : null,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(post['title'] ?? '',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 18)),
-                        ),
-                        if (post['userId'] == currentUserId)
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit),
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => EditPostScreen(
-                                          postId: postId, postData: post),
-                                    ),
-                                  );
-                                },
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete),
-                                onPressed: () async {
-                                  await FirebaseFirestore.instance
-                                      .collection('posts')
-                                      .doc(postId)
-                                      .delete();
-                                },
-                              ),
-                            ],
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(post['description'] ?? ''),
-                    const SizedBox(height: 4),
-                    Text(
-                        "📍 ${post['location']}   •   🕒 ${_formatTimeAgo(timestamp)}",
-                        style:
-                            const TextStyle(color: Colors.grey, fontSize: 12)),
-                  ],
-                ),
-              ),
-              const Divider(),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    TextButton.icon(
-                      icon: const Icon(Icons.thumb_up_alt_outlined),
-                      label: const Text("Upvote"),
-                      onPressed: () async {
-                        await _toggleUpvote(postId);
-                      },
-                    ),
-                    TextButton.icon(
-                      icon: const Icon(Icons.thumb_down_alt_outlined),
-                      label: const Text("Downvote"),
-                      onPressed: () async {
-                        await _toggleDownvote(postId);
-                      },
-                    ),
-                    if (showQuestionnaireButton)
-                      TextButton.icon(
-                        icon: const Icon(Icons.assignment_outlined),
-                        label: const Text("Fill Questionnaire"),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => QuestionnaireScreen(
-                                  questionnaireId: postId, postId: postId),
-                            ),
-                          );
-                        },
-                      ),
-                  ],
-                ),
-              ),
-            ],
+  Widget _buildSortMenu() {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.sort),
+      initialValue: _sortBy,
+      onSelected: (val) => setState(() => _sortBy = val),
+      itemBuilder: (ctx) => const [
+        PopupMenuItem(
+          value: 'newest',
+          child: ListTile(
+            leading: Icon(Icons.new_releases),
+            title: Text('Newest First'),
           ),
-        );
-      },
+        ),
+        PopupMenuItem(
+          value: 'upvotes',
+          child: ListTile(
+            leading: Icon(Icons.trending_up),
+            title: Text('Most Popular'),
+          ),
+        ),
+      ],
     );
   }
 
-  Future<void> _toggleUpvote(String postId) async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final userId = currentUser?.uid;
-
-    if (userId != null) {
-      final reactionRef = FirebaseFirestore.instance
-          .collection('posts')
-          .doc(postId)
-          .collection('reactions')
-          .doc(userId);
-      final doc = await reactionRef.get();
-
-      if (doc.exists) {
-        await reactionRef.update({'reaction': 'upvote'});
-      } else {
-        await reactionRef.set({'reaction': 'upvote', 'userId': userId});
-      }
-    }
-  }
-
-  Future<void> _toggleDownvote(String postId) async {
-    final currentUser = FirebaseAuth.instance.currentUser;
-    final userId = currentUser?.uid;
-
-    if (userId != null) {
-      final reactionRef = FirebaseFirestore.instance
-          .collection('posts')
-          .doc(postId)
-          .collection('reactions')
-          .doc(userId);
-      final doc = await reactionRef.get();
-
-      if (doc.exists) {
-        await reactionRef.update({'reaction': 'downvote'});
-      } else {
-        await reactionRef.set({'reaction': 'downvote', 'userId': userId});
-      }
-    }
-  }
-
-  String _formatTimeAgo(DateTime dateTime) {
-    final diff = DateTime.now().difference(dateTime);
-    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
-    if (diff.inHours < 24) return '${diff.inHours} hr ago';
-    return '${diff.inDays} days ago';
+  Widget _buildFilterMenu() {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.filter_list),
+      initialValue: _filter,
+      onSelected: (val) => setState(() => _filter = val),
+      itemBuilder: (ctx) => const [
+        PopupMenuItem(value: 'all', child: Text('All Posts')),
+        PopupMenuItem(
+          value: 'lost',
+          child: ListTile(
+            leading: Icon(Icons.search_off, color: Colors.red),
+            title: Text('Lost Items'),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'found',
+          child: ListTile(
+            leading: Icon(Icons.search, color: Colors.green),
+            title: Text('Found Items'),
+          ),
+        ),
+      ],
+    );
   }
 }

@@ -20,7 +20,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   String? _location;
   String? _type;
   XFile? _selectedImage;
-  List<String> questions = []; // Store the dynamic list of questions
+  List<String> questions = [];
 
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
@@ -30,7 +30,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     }
   }
 
-  // Add question to the list
   void _addQuestion() {
     if (_questionController.text.isNotEmpty) {
       setState(() {
@@ -40,7 +39,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     }
   }
 
-  // Save post and questionnaire to Firestore
   Future<void> _savePost() async {
     final user = FirebaseAuth.instance.currentUser;
     if (!_formKey.currentState!.validate()) return;
@@ -49,16 +47,13 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         ? _selectedImage!.path
         : 'https://picsum.photos/seed/defaultImage/600/300';
 
-    // Create a questionnaire associated with the post
     final questionnaireRef =
         await FirebaseFirestore.instance.collection('questionnaires').add({
-      'questions': questions, // Add the list of questions here
-      'correctAnswers': List.filled(
-          questions.length, ''), // Empty for now, can be updated later
+      'questions': questions,
+      'correctAnswers': List.filled(questions.length, ''),
       'foundDate': Timestamp.now(),
     });
 
-    // Add the post to Firestore
     await FirebaseFirestore.instance.collection('posts').add({
       'userId': user?.uid,
       'title': _titleController.text.trim(),
@@ -66,8 +61,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       'type': _type,
       'imageUrl': defaultImageUrl,
       'timestamp': Timestamp.now(),
-      'questionnaireId':
-          questionnaireRef.id, // Link the post to the questionnaire
+      'questionnaireId': questionnaireRef.id,
     });
 
     if (mounted) {
@@ -78,12 +72,26 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     }
   }
 
+  BoxDecoration _gradientBackground() => const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF4A148C), Color(0xFF6A1B9A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Create Post")),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: const Text("Create Post"),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: Container(
+        decoration: _gradientBackground(),
+        padding: const EdgeInsets.fromLTRB(16, 80, 16, 16),
         child: Form(
           key: _formKey,
           child: ListView(
@@ -92,68 +100,120 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 onTap: _pickImage,
                 child: Container(
                   height: 200,
-                  color: Colors.grey[300],
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(15),
+                    color: Colors.white.withOpacity(0.2),
+                    border: Border.all(color: Colors.white70),
+                  ),
                   child: _selectedImage != null
                       ? (kIsWeb
                           ? Image.network(_selectedImage!.path,
                               fit: BoxFit.cover)
-                          : Image.file(File(_selectedImage!.path),
-                              fit: BoxFit.cover))
-                      : const Center(child: Text("Tap to select image")),
+                          : ClipRRect(
+                              borderRadius: BorderRadius.circular(15),
+                              child: Image.file(File(_selectedImage!.path),
+                                  fit: BoxFit.cover)))
+                      : const Center(
+                          child: Text("Tap to select image",
+                              style: TextStyle(color: Colors.white))),
                 ),
               ),
-              const SizedBox(height: 10),
-              TextFormField(
-                controller: _titleController,
-                decoration: const InputDecoration(labelText: "Title"),
-                validator: (val) =>
-                    val == null || val.isEmpty ? "Required" : null,
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: _location,
-                decoration: const InputDecoration(labelText: "Location"),
-                items: const [
-                  DropdownMenuItem(
-                      value: "main-Building", child: Text("S-Building")),
-                  DropdownMenuItem(
-                      value: "S-Building", child: Text("B-Building")),
-                  DropdownMenuItem(
-                      value: "N-Building", child: Text("E-Building")),
-                ],
-                onChanged: (val) => setState(() => _location = val),
-                validator: (val) => val == null ? "Choose location" : null,
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                value: _type,
-                decoration: const InputDecoration(labelText: "Type"),
-                items: const [
-                  DropdownMenuItem(value: "lost", child: Text("Lost")),
-                  DropdownMenuItem(value: "found", child: Text("Found")),
-                ],
-                onChanged: (val) => setState(() => _type = val),
-                validator: (val) => val == null ? "Choose type" : null,
-              ),
-              const SizedBox(height: 20),
-              // Add Question Section
-              TextFormField(
-                controller: _questionController,
-                decoration: const InputDecoration(labelText: "Enter Question"),
-              ),
-              ElevatedButton(
+              const SizedBox(height: 16),
+              _buildStyledTextField(_titleController, "Title", true),
+              const SizedBox(height: 16),
+              _buildStyledDropdown(
+                  "Location",
+                  _location,
+                  [
+                    "S-Building",
+                    "B-Building",
+                    "E-Building",
+                  ],
+                  (val) => setState(() => _location = val)),
+              const SizedBox(height: 16),
+              _buildStyledDropdown("Type", _type, ["lost", "found"],
+                  (val) => setState(() => _type = val)),
+              const SizedBox(height: 16),
+              _buildStyledTextField(
+                  _questionController, "Enter Question", false),
+              TextButton.icon(
                 onPressed: _addQuestion,
-                child: const Text("Add Question"),
+                icon: const Icon(Icons.add, color: Colors.white),
+                label: const Text("Add Question",
+                    style: TextStyle(color: Colors.white)),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 10),
+              if (questions.isNotEmpty)
+                Wrap(
+                  children: questions
+                      .map((q) => Chip(
+                            label: Text(q,
+                                style: const TextStyle(color: Colors.white)),
+                            backgroundColor: Colors.purple[400],
+                          ))
+                      .toList(),
+                ),
+              const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _savePost,
-                child: const Text("Post"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.deepPurple,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: const Text("Post",
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildStyledTextField(
+      TextEditingController controller, String label, bool required) {
+    return TextFormField(
+      controller: controller,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white70),
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.1),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      validator: required
+          ? (val) => val == null || val.isEmpty ? "Required" : null
+          : null,
+    );
+  }
+
+  Widget _buildStyledDropdown(String label, String? value, List<String> items,
+      Function(String?) onChanged) {
+    return DropdownButtonFormField<String>(
+      value: value,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white70),
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.1),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      dropdownColor: Colors.purple[800],
+      style: const TextStyle(color: Colors.white),
+      iconEnabledColor: Colors.white,
+      items: items
+          .map((item) => DropdownMenuItem<String>(
+                value: item,
+                child: Text(item, style: const TextStyle(color: Colors.white)),
+              ))
+          .toList(),
+      onChanged: onChanged,
+      validator: (val) => val == null ? "Required" : null,
     );
   }
 }

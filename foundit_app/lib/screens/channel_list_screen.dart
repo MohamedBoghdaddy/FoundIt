@@ -54,24 +54,84 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
             itemBuilder: (context, index) {
               final chatDoc = chats[index];
               final chatData = chatDoc.data() as Map<String, dynamic>;
+              final userIds = chatData['userIds'] as List<dynamic>? ?? [];
 
-              final List<dynamic> userIds = chatData['userIds'] ?? [];
-              final otherUserId = userIds.firstWhere(
+              final otherUserId = userIds.firstWhereOrNull(
                 (id) => id != currentUser.id,
-                orElse: () => 'Unknown',
               );
 
-              return ListTile(
-                title: Text('Chat with: $otherUserId'),
-                subtitle: Text(chatData['lastMessage'] ?? ''),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ChatScreen(
-                        chatId: chatDoc.id,
-                        currentUser: currentUser,
+              if (otherUserId == null) return const SizedBox();
+
+              return FutureBuilder<DocumentSnapshot>(
+                future: _firestore.collection('users').doc(otherUserId).get(),
+                builder: (context, userSnapshot) {
+                  if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
+                    return const ListTile(title: Text("Loading user..."));
+                  }
+
+                  final userData =
+                      userSnapshot.data!.data() as Map<String, dynamic>;
+                  final firstName =
+                      userData['firstName']?.toString() ?? 'No Name';
+                  final avatarUrl = userData['imageUrl'];
+                  final isOnline = userData['isOnline'] == true;
+
+                  return Card(
+                    margin:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundImage:
+                            avatarUrl != null ? NetworkImage(avatarUrl) : null,
+                        child:
+                            avatarUrl == null ? const Icon(Icons.person) : null,
                       ),
+                      title: Text(firstName),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            chatData['lastMessage'] ?? '',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          StreamBuilder<DocumentSnapshot>(
+                            stream: _firestore
+                                .collection('chats')
+                                .doc(chatDoc.id)
+                                .collection('typingStatus')
+                                .doc(otherUserId)
+                                .snapshots(),
+                            builder: (context, typingSnapshot) {
+                              if (typingSnapshot.hasData &&
+                                  typingSnapshot.data!.exists &&
+                                  (typingSnapshot.data!['isTyping'] ?? false)) {
+                                return const Text(
+                                  'Typing...',
+                                  style: TextStyle(color: Colors.grey),
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            },
+                          ),
+                        ],
+                      ),
+                      trailing: Icon(
+                        Icons.circle,
+                        color: isOnline ? Colors.green : Colors.grey,
+                        size: 10,
+                      ),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ChatScreen(
+                              chatId: chatDoc.id,
+                              currentUser: currentUser,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   );
                 },
@@ -81,102 +141,156 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
+        onPressed: _showUserSelection,
         child: const Icon(Icons.add),
-        onPressed: () => _showUserSelection(),
       ),
     );
   }
 
   void _showUserSelection() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const UserSelectionScreen()),
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => const SearchUserSheet(),
     );
   }
 }
 
-class UserSelectionScreen extends StatelessWidget {
-  const UserSelectionScreen({super.key});
+class SearchUserSheet extends StatefulWidget {
+  const SearchUserSheet({super.key});
+
+  @override
+  State<SearchUserSheet> createState() => _SearchUserSheetState();
+}
+
+class _SearchUserSheetState extends State<SearchUserSheet> {
+  String searchQuery = '';
 
   @override
   Widget build(BuildContext context) {
     final currentUser = fb_auth.FirebaseAuth.instance.currentUser;
 
-    if (currentUser == null) {
-      return const Scaffold(
-        body: Center(child: Text('Please login first')),
-      );
-    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: "Search users...",
+              prefixIcon: const Icon(Icons.search),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onChanged: (val) => setState(() => searchQuery = val.toLowerCase()),
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream:
+                  FirebaseFirestore.instance.collection('users').snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Select User')),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text('No users found.'));
-          }
+                final users = snapshot.data!.docs
+                    .where((doc) =>
+                        doc.id != currentUser?.uid &&
+                        (doc['firstName']
+                                ?.toLowerCase()
+                                .contains(searchQuery) ??
+                            false))
+                    .toList();
 
-          final users = snapshot.data!.docs
-              .where((u) => u.id != currentUser.uid)
-              .toList();
+                if (users.isEmpty) {
+                  return const Center(child: Text("No matching users found"));
+                }
 
-          return ListView(
-            children: users.map((doc) {
-              final userData = doc.data() as Map<String, dynamic>;
-              final displayName = userData['displayName'] ??
-                  '${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}'.trim();
+                return ListView.builder(
+                  itemCount: users.length,
+                  itemBuilder: (context, index) {
+                    final userDoc = users[index];
+                    final userData = userDoc.data() as Map<String, dynamic>;
 
-              return ListTile(
-                leading: const CircleAvatar(child: Icon(Icons.person)),
-                title: Text(displayName.isNotEmpty ? displayName : 'Unknown'),
-                subtitle: Text(userData['email'] ?? ''),
-                onTap: () async {
-                  final chatRef = FirebaseFirestore.instance.collection('chats');
-                  final selectedUserId = doc.id;
-                  final selectedUser = types.User(id: selectedUserId);
-                  final currentUserTyped = types.User(id: currentUser.uid);
+                    final fullName =
+                        "${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}"
+                            .trim();
+                    final imageUrl = userData['imageUrl'];
+                    final email = userData['email'] ?? '';
 
-                  // Check for existing chat
-                  final possibleChats = await chatRef
-                      .where('userIds', arrayContains: currentUser.uid)
-                      .get();
+                    return Card(
+                      elevation: 2,
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage:
+                              imageUrl != null ? NetworkImage(imageUrl) : null,
+                          child: imageUrl == null
+                              ? const Icon(Icons.person)
+                              : null,
+                        ),
+                        title: Text(fullName.isNotEmpty ? fullName : 'No Name'),
+                        subtitle: Text(email),
+                        onTap: () async {
+                          if (currentUser == null) return;
 
-                  final existingChat = possibleChats.docs.firstWhereOrNull((chatDoc) {
-                    final userIds = List<String>.from(chatDoc['userIds']);
-                    return userIds.contains(selectedUserId) && userIds.length == 2;
-                  });
+                          final selectedUserId = userDoc.id;
+                          final currentUserTyped =
+                              types.User(id: currentUser.uid);
 
-                  String chatId;
+                          final chatRef =
+                              FirebaseFirestore.instance.collection('chats');
+                          final possibleChats = await chatRef
+                              .where('userIds', arrayContains: currentUser.uid)
+                              .get();
 
-                  if (existingChat != null) {
-                    chatId = existingChat.id;
-                  } else {
-                    final newChatDoc = await chatRef.add({
-                      'userIds': [currentUser.uid, selectedUserId],
-                      'createdAt': FieldValue.serverTimestamp(),
-                      'lastMessage': '',
-                    });
-                    chatId = newChatDoc.id;
-                  }
+                          final existingChat =
+                              possibleChats.docs.firstWhereOrNull(
+                            (chatDoc) {
+                              final userIds =
+                                  List<String>.from(chatDoc['userIds']);
+                              return userIds.contains(selectedUserId) &&
+                                  userIds.length == 2;
+                            },
+                          );
 
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ChatScreen(
-                        chatId: chatId,
-                        currentUser: currentUserTyped,
+                          String chatId;
+                          if (existingChat != null) {
+                            chatId = existingChat.id;
+                          } else {
+                            final newChatDoc = await chatRef.add({
+                              'userIds': [currentUser.uid, selectedUserId],
+                              'createdAt': FieldValue.serverTimestamp(),
+                              'lastMessage': '',
+                            });
+                            chatId = newChatDoc.id;
+                          }
+
+                          if (!mounted) return;
+                          Navigator.pop(context);
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatScreen(
+                                chatId: chatId,
+                                currentUser: currentUserTyped,
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                    ),
-                  );
-                },
-              );
-            }).toList(),
-          );
-        },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

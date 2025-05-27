@@ -45,7 +45,7 @@ class _ProfilePageState extends State<ProfilePage> {
         currentIndex: 1,
         onTap: (index) {
           if (index == 0) Navigator.pushReplacementNamed(context, '/home');
-          if (index == 2) Navigator.pushNamed(context, '/chat');
+          if (index == 2) Navigator.pushNamed(context, '/channels');
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../services/auth_service.dart';
 
@@ -13,7 +14,8 @@ class RegisterScreen extends StatefulWidget {
   State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _RegisterScreenState extends State<RegisterScreen>
+    with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _authService = AuthService();
 
@@ -33,6 +35,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Timer? countdownTimer;
   int countdownSeconds = 30;
 
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+
   void startCountdown() {
     setState(() => canResendOtp = false);
     countdownSeconds = 30;
@@ -50,176 +55,199 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeIn,
+    );
+    _animationController.forward();
+  }
+
+  @override
   void dispose() {
     countdownTimer?.cancel();
+    _animationController.dispose();
     super.dispose();
   }
 
   Future<void> _pickImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      setState(() {
-        _profileImage = File(image.path);
-      });
+      setState(() => _profileImage = File(image.path));
     }
+  }
+
+  Widget _buildTextField({
+    required String label,
+    required Function(String) onChanged,
+    bool obscure = false,
+    String? Function(String?)? validator,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: TextFormField(
+        decoration: InputDecoration(
+          labelText: label,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        obscureText: obscure,
+        validator: validator,
+        onChanged: onChanged,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Register")),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              Center(
-                child: GestureDetector(
-                  onTap: _pickImage,
-                  child: CircleAvatar(
-                    radius: 50,
-                    backgroundImage:
-                        _profileImage != null ? FileImage(_profileImage!) : null,
-                    child: _profileImage == null
-                        ? const Icon(Icons.camera_alt, size: 50)
-                        : null,
+      backgroundColor: Colors.grey[100],
+      appBar: AppBar(
+        title: const Text("Register"),
+        elevation: 0,
+      ),
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CircleAvatar(
+                      radius: 60,
+                      backgroundImage: _profileImage != null
+                          ? FileImage(_profileImage!)
+                          : null,
+                      child: _profileImage == null
+                          ? IconButton(
+                              icon: const Icon(Icons.camera_alt, size: 40),
+                              onPressed: _pickImage,
+                            )
+                          : null,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildTextField(
+                  label: "First Name",
+                  onChanged: (val) => firstName = val.trim(),
+                  validator: (val) =>
+                      val != null && val.trim().isNotEmpty ? null : "Required",
+                ),
+                _buildTextField(
+                  label: "Last Name",
+                  onChanged: (val) => lastName = val.trim(),
+                  validator: (val) =>
+                      val != null && val.trim().isNotEmpty ? null : "Required",
+                ),
+                _buildTextField(
+                  label: "MIU Email",
+                  onChanged: (val) => email = val.trim(),
+                  validator: (val) =>
+                      val != null && val.endsWith('@miuegypt.edu.eg')
+                          ? null
+                          : "Use MIU email",
+                ),
+                _buildTextField(
+                  label: "Password",
+                  obscure: true,
+                  onChanged: (val) => password = val.trim(),
+                  validator: (val) => val != null && val.length >= 6
+                      ? null
+                      : "Min 6 characters",
+                ),
+                if (otpSent)
+                  _buildTextField(
+                    label: "Enter OTP",
+                    onChanged: (val) => otp = val.trim(),
                   ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              TextFormField(
-                decoration: const InputDecoration(labelText: "First Name"),
-                validator: (val) =>
-                    val != null && val.trim().isNotEmpty ? null : "Enter first name",
-                onChanged: (val) => firstName = val.trim(),
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                decoration: const InputDecoration(labelText: "Last Name"),
-                validator: (val) =>
-                    val != null && val.trim().isNotEmpty ? null : "Enter last name",
-                onChanged: (val) => lastName = val.trim(),
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                decoration: const InputDecoration(labelText: "MIU Email"),
-                validator: (val) =>
-                    val != null && val.endsWith('@miuegypt.edu.eg')
-                        ? null
-                        : "Enter a valid MIU email",
-                onChanged: (val) => email = val.trim(),
-              ),
-              const SizedBox(height: 10),
-              TextFormField(
-                decoration: const InputDecoration(labelText: "Password"),
-                obscureText: true,
-                validator: (val) => val != null && val.length >= 6
-                    ? null
-                    : "Password must be at least 6 characters",
-                onChanged: (val) => password = val.trim(),
-              ),
-              const SizedBox(height: 20),
-              if (otpSent)
-                TextFormField(
-                  decoration: const InputDecoration(labelText: "Enter OTP"),
-                  onChanged: (val) => otp = val.trim(),
-                ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: canResendOtp
-                    ? () async {
-                        if (_formKey.currentState!.validate()) {
-                          try {
-                            await _authService.sendFirebaseOtp(email);
-                            setState(() => otpSent = true);
-                            startCountdown();
-
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text("OTP sent to $email")),
-                            );
-                          } catch (e) {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text("Error sending OTP: $e")),
-                            );
+                const SizedBox(height: 10),
+                if (otpSent)
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.verified),
+                    label: Text(canResendOtp
+                        ? "Send OTP"
+                        : "Resend in $countdownSeconds s"),
+                    onPressed: canResendOtp
+                        ? () async {
+                            if (_formKey.currentState!.validate()) {
+                              await _authService.sendFirebaseOtp(email);
+                              setState(() => otpSent = true);
+                              startCountdown();
+                            }
                           }
-                        }
+                        : null,
+                  )
+                else
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (_formKey.currentState!.validate()) {
+                        await _authService.sendFirebaseOtp(email);
+                        setState(() => otpSent = true);
+                        startCountdown();
                       }
-                    : null,
-                child: Text(canResendOtp
-                    ? "Send OTP"
-                    : "Resend OTP in $countdownSeconds s"),
-              ),
-              const SizedBox(height: 10),
-              if (otpSent && !otpVerified)
-                ElevatedButton(
-                  onPressed: () async {
-                    try {
-                      final isValid = await _authService.verifyOtp(email, otp);
-                      if (!isValid) {
+                    },
+                    child: const Text("Send OTP"),
+                  ),
+                const SizedBox(height: 10),
+                if (otpSent && !otpVerified)
+                  ElevatedButton(
+                    onPressed: () async {
+                      final valid = await _authService.verifyOtp(email, otp);
+                      if (valid) {
+                        setState(() => otpVerified = true);
+                      } else {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text("Invalid OTP")),
                         );
-                        return;
                       }
-
-                      setState(() => otpVerified = true);
-
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("OTP Verified!")),
-                      );
-                    } catch (e) {
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("Error verifying OTP: $e")),
-                      );
-                    }
-                  },
-                  child: const Text("Verify OTP"),
-                ),
-              if (otpVerified)
-                ElevatedButton(
-                  onPressed: () async {
-                    if (!_formKey.currentState!.validate()) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text("Please fill all fields")),
-                      );
-                      return;
-                    }
-                    try {
-                      String? imageUrl;
-                      if (_profileImage != null) {
-                        imageUrl = await _authService.uploadProfileImage(
-                            _profileImage!, email);
+                    },
+                    child: const Text("Verify OTP"),
+                  ),
+                const SizedBox(height: 10),
+                if (otpVerified)
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.check_circle_outline),
+                    label: const Text("Register"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      minimumSize: const Size.fromHeight(50),
+                    ),
+                    onPressed: () async {
+                      if (_formKey.currentState!.validate()) {
+                        try {
+                          String? imageUrl;
+                          if (_profileImage != null) {
+                            imageUrl = await _authService.uploadProfileImage(
+                                _profileImage!, email);
+                          }
+                          await _authService.registerUser(
+                            email,
+                            password,
+                            firstName,
+                            lastName,
+                            imageUrl: imageUrl,
+                          );
+                          if (!context.mounted) return;
+                          Navigator.pushReplacementNamed(context, '/home');
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text("Error: $e")),
+                          );
+                        }
                       }
-                      await _authService.registerUser(
-                        email,
-                        password,
-                        firstName,
-                        lastName,
-                        imageUrl: imageUrl,
-                      );
-
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text("Registered Successfully")),
-                      );
-
-                      Navigator.pushReplacementNamed(context, '/home');
-                    } catch (e) {
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("Error: $e")),
-                      );
-                    }
-                  },
-                  child: const Text("Register"),
-                ),
-            ],
+                    },
+                  ),
+              ],
+            ),
           ),
         ),
       ),

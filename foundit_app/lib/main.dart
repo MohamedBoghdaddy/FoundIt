@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 
-import 'screens/channel_list_screen.dart';
-import 'screens/homepage.dart';
+import 'screens/channel_list_screen.dart' as channel_list;
+import 'screens/home.dart'; // contains HomeScreen
+import 'screens/homepage.dart'; // contains HomePage
 import 'screens/create_post.dart';
-import 'screens/home.dart';
 import 'screens/login.dart';
 import 'screens/register_screen.dart';
 import 'screens/profile_page.dart';
@@ -73,10 +73,10 @@ class MyApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => const SplashScreenRedirect(),
-        '/welcome': (context) => const HomeScreen(),
+        // '/welcome': (context) => const HomeScreen(),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
-        '/home': (context) => const HomePage(),
+        '/home': (context) => const FeedPage(),
         '/createPost': (context) => const CreatePostScreen(),
         '/profile': (context) => const ProfilePage(),
         '/editPost': (context) => const Placeholder(),
@@ -84,25 +84,32 @@ class MyApp extends StatelessWidget {
               questionnaireId: '',
               postId: '',
             ),
-        '/channels': (context) => const ChannelListScreen(),
+        '/channels': (context) => const channel_list.ChannelListScreen(),
       },
     );
   }
 }
 
-class SplashScreenRedirect extends StatelessWidget {
+class SplashScreenRedirect extends StatefulWidget {
   const SplashScreenRedirect({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    Future.delayed(const Duration(seconds: 2), () {
-      if (firebase_auth.FirebaseAuth.instance.currentUser == null) {
-        Navigator.pushReplacementNamed(context, '/welcome');
-      } else {
-        Navigator.pushReplacementNamed(context, '/channels');  // غيرتها تدخل قائمة المحادثات
-      }
-    });
+  State<SplashScreenRedirect> createState() => _SplashScreenRedirectState();
+}
 
+class _SplashScreenRedirectState extends State<SplashScreenRedirect> {
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(seconds: 2), () {
+      final user = firebase_auth.FirebaseAuth.instance.currentUser;
+      Navigator.pushReplacementNamed(
+          context, user == null ? '/welcome' : '/channels');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return const Scaffold(
       body: Center(child: Text("FoundIt", style: TextStyle(fontSize: 24))),
     );
