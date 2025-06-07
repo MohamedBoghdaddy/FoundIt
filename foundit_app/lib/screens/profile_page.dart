@@ -11,10 +11,17 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  late Future<DocumentSnapshot<Map<String, dynamic>>> _userProfile;
+
   @override
   void initState() {
     super.initState();
-    debugPrint("⚡ ProfilePage Loaded");
+    _userProfile = _getUserProfile();
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>> _getUserProfile() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    return FirebaseFirestore.instance.collection('users').doc(uid).get();
   }
 
   Stream<QuerySnapshot> getUserPosts() {
@@ -24,7 +31,6 @@ class _ProfilePageState extends State<ProfilePage> {
       return const Stream.empty();
     }
 
-    // Get posts where userId matches the current user
     return FirebaseFirestore.instance
         .collection('posts')
         .where('userId', isEqualTo: userId)
@@ -34,62 +40,118 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
     return Scaffold(
+      backgroundColor: const Color(0xFFeff3ff),
       appBar: AppBar(
         title: const Text("My Posts"),
+        centerTitle: true,
+        backgroundColor: const Color(0xFF3182bd),
+        foregroundColor: Colors.white,
+        elevation: 4,
         automaticallyImplyLeading: false,
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: 1,
+        selectedItemColor: const Color(0xFF08519c),
         onTap: (index) {
           if (index == 0) Navigator.pushReplacementNamed(context, '/home');
-          if (index == 2) Navigator.pushNamed(context, '/chat');
+          if (index == 2) Navigator.pushNamed(context, '/channels');
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
+          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.pushNamed(context, '/createPost');
         },
-        backgroundColor: Colors.blue,
+        backgroundColor: const Color(0xFF3182bd),
         child: const Icon(Icons.add),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: getUserPosts(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: Column(
+        children: [
+          FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            future: _userProfile,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: CircularProgressIndicator(),
+                );
+              }
 
-          // Debug logs
-          if (snapshot.hasError) {
-            debugPrint("⚠️ Error fetching posts: ${snapshot.error}");
-          }
+              final data = snapshot.data!.data();
+              final name = '${data?['firstName'] ?? ''} ${data?['lastName'] ?? ''}';
+              final email = data?['email'] ?? '';
+              final imageUrl = data?['imageUrl'];
 
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(
-              child: Text("You haven’t posted anything yet."),
-            );
-          }
+              return Container(
+                width: double.infinity,
+                color: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 35,
+                      backgroundImage: imageUrl != null && imageUrl.toString().startsWith('http')
+                          ? NetworkImage(imageUrl)
+                          : const NetworkImage('https://cdn-icons-png.flaticon.com/512/149/149071.png'),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(name,
+                              style: const TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text(email, style: const TextStyle(color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: getUserPosts(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-          final posts = snapshot.data!.docs;
-          debugPrint("✅ Posts found: ${posts.length}");
+                if (snapshot.hasError) {
+                  debugPrint("⚠️ Error fetching posts: ${snapshot.error}");
+                }
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: posts.map((doc) {
-              final data = doc.data() as Map<String, dynamic>;
-              return _buildPostCard(context, data, doc.id);
-            }).toList(),
-          );
-        },
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      "You haven’t posted anything yet.",
+                      style: TextStyle(fontSize: 16, color: Colors.black54),
+                    ),
+                  );
+                }
+
+                final posts = snapshot.data!.docs;
+
+                return ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: posts.map((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return _buildPostCard(context, data, doc.id);
+                  }).toList(),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -101,16 +163,18 @@ class _ProfilePageState extends State<ProfilePage> {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 3,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (post['imageUrl'] != null &&
               post['imageUrl'].toString().startsWith('http'))
             ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               child: Image.network(
                 post['imageUrl'],
+                height: 200,
+                width: double.infinity,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) => const SizedBox(
                   height: 200,
@@ -126,12 +190,18 @@ class _ProfilePageState extends State<ProfilePage> {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(post['title'] ?? '',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 18)),
+                      child: Text(
+                        post['title'] ?? '',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: Color(0xFF08519c),
+                        ),
+                      ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.edit),
+                      tooltip: "Edit",
                       onPressed: () {
                         Navigator.push(
                           context,
@@ -146,6 +216,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete),
+                      tooltip: "Delete",
                       onPressed: () async {
                         await FirebaseFirestore.instance
                             .collection('posts')
@@ -159,8 +230,11 @@ class _ProfilePageState extends State<ProfilePage> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(post['description'] ?? ''),
-                const SizedBox(height: 4),
+                Text(
+                  post['description'] ?? '',
+                  style: const TextStyle(fontSize: 15),
+                ),
+                const SizedBox(height: 8),
                 Text(
                   "📍 ${post['location']}   •   🕒 ${_formatTimeAgo(timestamp)}",
                   style: const TextStyle(color: Colors.grey, fontSize: 12),

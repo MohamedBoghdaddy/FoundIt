@@ -23,6 +23,8 @@ dependencies:
   provider: ^6.1.5
   collection: 1.18.0         # ✅ fixed version
   chewie: 1.8.1
+  flutter_chat_types: ^3.6.2
+  intl: ^0.20.2
 
 
 

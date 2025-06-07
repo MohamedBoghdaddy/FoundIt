@@ -27,10 +27,24 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
+      backgroundColor: Color(0xFFeff3ff),
       body: Center(
-        child: Text(
-          "FoundIt",
-          style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search_rounded, size: 80, color: Color(0xFF3182bd)),
+            SizedBox(height: 20),
+            Text(
+              "FoundIt",
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF08519c),
+              ),
+            ),
+            SizedBox(height: 20),
+            CircularProgressIndicator(color: Color(0xFF3182bd)),
+          ],
         ),
       ),
     );

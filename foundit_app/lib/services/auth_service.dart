@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:typed_data';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -79,4 +80,14 @@ class AuthService {
   Future<void> logoutUser() async {
     await _auth.signOut();
   }
+  /// 🌐 Upload image bytes (for Chrome Web)
+Future<String> uploadProfileBytes(Uint8List bytes, String userId) async {
+  final storageRef =
+      FirebaseStorage.instance.ref().child('profile_images/$userId.jpg');
+  final uploadTask = storageRef.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+  final snapshot = await uploadTask.whenComplete(() {});
+  final downloadUrl = await snapshot.ref.getDownloadURL();
+  return downloadUrl;
+}
+
 }
