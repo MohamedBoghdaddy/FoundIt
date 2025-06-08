@@ -13,7 +13,6 @@ import 'package:uuid/uuid.dart';
 import 'package:open_file/open_file.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
-
 import '../providers/chat_messages_provider.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -138,11 +137,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             otherUserAvatarUrl = data['imageUrl'];
           });
         } else {
-          debugPrint("⚠️ Could not fetch other user's info: $otherUserId");
           setState(() => otherUserName = 'User');
         }
-      } else {
-        debugPrint("⚠️ Chat document not found: ${widget.chatId}");
       }
     } catch (e) {
       debugPrint("⚠️ Error fetching user info: $e");
@@ -351,9 +347,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content:
-                            Text("Please select date, time, and location."),
-                        duration: Duration(seconds: 2),
+                        content: Text("Please select date, time, and location."),
                       ),
                     );
                   }
@@ -364,36 +358,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           ),
         );
       },
-    );
-  }
-
-  void _handleAttachmentPressed() {
-    setState(() => showEmojiPicker = false);
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.image),
-              title: const Text('Send Image'),
-              onTap: () {
-                Navigator.pop(context);
-                _handleImageAttachment();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.calendar_today),
-              title: const Text('Schedule Meeting'),
-              onTap: () {
-                Navigator.pop(context);
-                _openMeetingAttachment();
-              },
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -411,22 +375,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     messages: provider.messages,
                     user: widget.currentUser,
                     onSendPressed: _handleSendPressed,
-                    onAttachmentPressed:
-                        _handleAttachmentPressed, // FIXED: Moved out of InputOptions
-                    inputOptions: InputOptions(
-                      textEditingController: _textController,
-                      // REMOVED: onAttachmentPressed from here
-                    ),
+                    onAttachmentPressed: _handleAttachmentPressed,
+                    inputOptions: InputOptions(textEditingController: _textController),
                     onMessageTap: (context, message) => _onMessageTap(message),
                     onMessageLongPress: (context, message) async {
                       final emoji = await showModalBottomSheet<String>(
                         context: context,
                         builder: (context) => Wrap(
-                          children:
-                              ['❤️', '😂', '👍', '🎉', '😮', '😢'].map((e) {
+                          children: ['❤️', '😂', '👍', '🎉', '😮', '😢'].map((e) {
                             return ListTile(
-                              title:
-                                  Text(e, style: const TextStyle(fontSize: 24)),
+                              title: Text(e, style: const TextStyle(fontSize: 24)),
                               onTap: () => Navigator.pop(context, e),
                             );
                           }).toList(),
@@ -436,9 +394,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         _handleReaction(emoji, message.id);
                       }
                     },
+                    scrollController: _scrollController,
                     showUserAvatars: true,
                     showUserNames: true,
-                    scrollController: _scrollController,
                     theme: const DefaultChatTheme(
                       inputBackgroundColor: Colors.white,
                       primaryColor: Color(0xFF3182bd),
@@ -446,15 +404,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       backgroundColor: Color(0xFFeff3ff),
                       inputTextColor: Colors.black,
                       inputTextCursorColor: Color(0xFF3182bd),
-                      sendButtonIcon:
-                          Icon(Icons.send, color: Color(0xFF3182bd)),
+                      sendButtonIcon: Icon(Icons.send, color: Color(0xFF3182bd)),
                       messageBorderRadius: 18,
                       messageInsetsVertical: 8,
                       messageInsetsHorizontal: 14,
-                      sentMessageBodyTextStyle:
-                          TextStyle(color: Colors.white, fontSize: 16),
-                      receivedMessageBodyTextStyle:
-                          TextStyle(color: Colors.black87, fontSize: 16),
+                      sentMessageBodyTextStyle: TextStyle(color: Colors.white, fontSize: 16),
+                      receivedMessageBodyTextStyle: TextStyle(color: Colors.black87, fontSize: 16),
                       inputTextStyle: TextStyle(fontSize: 16),
                       inputBorderRadius: BorderRadius.all(Radius.circular(24)),
                     ),
@@ -478,8 +433,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         iconColor: Colors.grey,
                         iconColorSelected: Colors.blue,
                         backspaceColor: Colors.red,
-                        recentsLimit:
-                            28, // FIXED: Changed 'recentsLimit' to 'recentEmojisLimit'
+                        recentsLimit: 28,
                       ),
                     ),
                   ),
@@ -495,8 +449,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       if (!snapshot.hasData || !snapshot.data!.exists) {
                         return const SizedBox.shrink();
                       }
-                      final data =
-                          snapshot.data!.data() as Map<String, dynamic>?;
+                      final data = snapshot.data!.data() as Map<String, dynamic>?;
                       final isTyping = data?['isTyping'] ?? false;
                       return isTyping
                           ? const Padding(
@@ -515,31 +468,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           : const SizedBox.shrink();
                     },
                   ),
-              ],
-            ),
-            bottomNavigationBar: BottomNavigationBar(
-              currentIndex: 2,
-              selectedItemColor: const Color(0xFF3182bd),
-              onTap: (index) {
-                if (index == 0) {
-                  Navigator.pushReplacementNamed(context, '/home');
-                } else if (index == 1) {
-                  Navigator.pushReplacementNamed(context, '/profile');
-                }
-              },
-              items: const [
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.home),
-                  label: 'Home',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.person),
-                  label: 'Profile',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.chat_bubble_outline),
-                  label: 'Chat',
-                ),
               ],
             ),
           );

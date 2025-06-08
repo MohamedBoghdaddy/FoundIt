@@ -3,8 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:collection/collection.dart';
+
 import 'chat_screen.dart';
-import 'userSearchScreen.dart'; // Keep this import if used elsewhere
+import 'user_selection_screen.dart'; // Unified import
 
 class ChannelListScreen extends StatefulWidget {
   const ChannelListScreen({super.key});
@@ -22,16 +23,13 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
     return _firestore
         .collection('chats')
         .where('userIds', arrayContains: firebaseUser!.uid)
-        .orderBy('createdAt', descending: true)
         .snapshots();
   }
 
   void _showUserSelection() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const UserSelectionScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const UserSelectionScreen()),
     );
   }
 
@@ -103,19 +101,16 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
                   final userData =
                       userSnapshot.data!.data() as Map<String, dynamic>;
 
-                  // 🔁 Fallback displayName logic
+                  // Display name with fallback logic
                   String displayName = '';
                   final firstName = userData['firstName'] ?? '';
                   final lastName = userData['lastName'] ?? '';
                   displayName = '$firstName $lastName'.trim();
-
                   if (displayName.isEmpty) {
                     final email = userData['email'] as String?;
-                    if (email != null && email.isNotEmpty) {
-                      displayName = email.split('@').first;
-                    } else {
-                      displayName = 'Unknown';
-                    }
+                    displayName = (email != null && email.isNotEmpty)
+                        ? email.split('@').first
+                        : 'Unknown';
                   }
 
                   final imageUrl = userData['imageUrl'];

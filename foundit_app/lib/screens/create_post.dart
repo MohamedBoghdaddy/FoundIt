@@ -80,6 +80,15 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         ),
       );
 
+  Widget _buildImagePreview() {
+    if (_selectedImage == null) {
+      return const Center(child: Text("Tap to select image", style: TextStyle(color: Colors.white)));
+    }
+    return kIsWeb
+        ? Image.network(_selectedImage!.path, fit: BoxFit.cover)
+        : Image.file(File(_selectedImage!.path), fit: BoxFit.cover);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -105,17 +114,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                     color: Colors.white.withOpacity(0.2),
                     border: Border.all(color: Colors.white70),
                   ),
-                  child: _selectedImage != null
-                      ? (kIsWeb
-                          ? Image.network(_selectedImage!.path,
-                              fit: BoxFit.cover)
-                          : ClipRRect(
-                              borderRadius: BorderRadius.circular(15),
-                              child: Image.file(File(_selectedImage!.path),
-                                  fit: BoxFit.cover)))
-                      : const Center(
-                          child: Text("Tap to select image",
-                              style: TextStyle(color: Colors.white))),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(15),
+                    child: _buildImagePreview(),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -124,31 +126,26 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               _buildStyledDropdown(
                   "Location",
                   _location,
-                  [
-                    "S-Building",
-                    "B-Building",
-                    "E-Building",
-                  ],
+                  ["S-Building", "B-Building", "E-Building"],
                   (val) => setState(() => _location = val)),
               const SizedBox(height: 16),
-              _buildStyledDropdown("Type", _type, ["lost", "found"],
-                  (val) => setState(() => _type = val)),
+              _buildStyledDropdown(
+                  "Type", _type, ["lost", "found"], (val) => setState(() => _type = val)),
               const SizedBox(height: 16),
-              _buildStyledTextField(
-                  _questionController, "Enter Question", false),
+              _buildStyledTextField(_questionController, "Enter Question", false),
               TextButton.icon(
                 onPressed: _addQuestion,
                 icon: const Icon(Icons.add, color: Colors.white),
-                label: const Text("Add Question",
-                    style: TextStyle(color: Colors.white)),
+                label: const Text("Add Question", style: TextStyle(color: Colors.white)),
               ),
               const SizedBox(height: 10),
               if (questions.isNotEmpty)
                 Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: questions
                       .map((q) => Chip(
-                            label: Text(q,
-                                style: const TextStyle(color: Colors.white)),
+                            label: Text(q, style: const TextStyle(color: Colors.white)),
                             backgroundColor: Colors.purple[400],
                           ))
                       .toList(),
@@ -163,9 +160,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                       borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                child: const Text("Post",
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                child: const Text(
+                  "Post",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
@@ -192,8 +190,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     );
   }
 
-  Widget _buildStyledDropdown(String label, String? value, List<String> items,
-      Function(String?) onChanged) {
+  Widget _buildStyledDropdown(
+      String label, String? value, List<String> items, Function(String?) onChanged) {
     return DropdownButtonFormField<String>(
       value: value,
       decoration: InputDecoration(

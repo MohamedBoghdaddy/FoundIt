@@ -41,9 +41,13 @@ class AuthService {
 
   /// ✅ Upload profile image (Web)
   Future<String> uploadProfileBytes(Uint8List bytes, String userId) async {
-    final ref = _storage.ref().child('profile_images/$userId.jpg');
-    await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
-    return await ref.getDownloadURL();
+    final storageRef = _storage.ref().child('profile_images/$userId.jpg');
+    final uploadTask = storageRef.putData(
+      bytes,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
+    final snapshot = await uploadTask.whenComplete(() {});
+    return await snapshot.ref.getDownloadURL();
   }
 
   /// ✅ Register user and store profile in Firestore
@@ -65,8 +69,8 @@ class AuthService {
       'createdAt': Timestamp.now(),
       'firstName': firstName,
       'lastName': lastName,
-      'imageUrl':
-          imageUrl ?? 'https://cdn-icons-png.flaticon.com/512/149/149071.png',
+      'imageUrl': imageUrl ??
+          'https://cdn-icons-png.flaticon.com/512/149/149071.png',
     });
   }
 

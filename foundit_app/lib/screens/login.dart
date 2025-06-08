@@ -50,8 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: const Text("Login Successful",
-                        style: TextStyle(color: Colors.white)),
+                    content: const Text("Login Successful", style: TextStyle(color: Colors.white)),
                     backgroundColor: Colors.green.shade700,
                     behavior: SnackBarBehavior.floating,
                   ),
@@ -61,8 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: const Text("Password reset email sent",
-                        style: TextStyle(color: Colors.white)),
+                    content: const Text("Password reset email sent", style: TextStyle(color: Colors.white)),
                     backgroundColor: Colors.blue.shade700,
                     behavior: SnackBarBehavior.floating,
                   ),
@@ -71,8 +69,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text(state.message,
-                        style: const TextStyle(color: Colors.white)),
+                    content: Text(state.message, style: const TextStyle(color: Colors.white)),
                     backgroundColor: Colors.red.shade700,
                     behavior: SnackBarBehavior.floating,
                   ),
@@ -108,7 +105,6 @@ class _LoginUIState extends State<LoginUI> {
     super.dispose();
   }
 
-  @override
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -173,30 +169,25 @@ class _LoginUIState extends State<LoginUI> {
                             _inputDecoration("Password", Icons.lock).copyWith(
                           suffixIcon: IconButton(
                             icon: Icon(
-                              _viewPassword
-                                  ? Icons.visibility
-                                  : Icons.visibility_off,
+                              _viewPassword ? Icons.visibility : Icons.visibility_off,
                               color: Colors.white,
                             ),
-                            onPressed: () {
-                              setState(() {
-                                _viewPassword = !_viewPassword;
-                              });
-                            },
+                            onPressed: () => setState(() => _viewPassword = !_viewPassword),
                           ),
                         ),
                         style: const TextStyle(color: Colors.white),
-                        validator: (val) => val != null && val.length >= 6
-                            ? null
-                            : "Password must be at least 6 characters",
+                        validator: (val) =>
+                            val != null && val.length >= 6
+                                ? null
+                                : "Password must be at least 6 characters",
                       ),
                       const SizedBox(height: 10),
                       Align(
                         alignment: Alignment.centerRight,
                         child: GestureDetector(
-                          onTap: () => context
-                              .read<AuthCubit>()
-                              .resetPassword(email: _emailController.text),
+                          onTap: () => context.read<AuthCubit>().resetPassword(
+                                email: _emailController.text,
+                              ),
                           child: const Text(
                             "Forgot Password?",
                             style: TextStyle(
@@ -238,8 +229,7 @@ class _LoginUIState extends State<LoginUI> {
                           ),
                           GestureDetector(
                             onTap: () {
-                              Navigator.of(context)
-                                  .pushReplacementNamed('/register');
+                              Navigator.of(context).pushReplacementNamed('/register');
                             },
                             child: const Text(
                               "Sign Up",

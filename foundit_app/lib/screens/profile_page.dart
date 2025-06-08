@@ -61,8 +61,7 @@ class _ProfilePageState extends State<ProfilePage> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
+          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -85,22 +84,19 @@ class _ProfilePageState extends State<ProfilePage> {
               }
 
               final data = snapshot.data!.data();
-              final name =
-                  '${data?['firstName'] ?? ''} ${data?['lastName'] ?? ''}';
+              final name = '${data?['firstName'] ?? ''} ${data?['lastName'] ?? ''}';
               final email = data?['email'] ?? '';
               final imageUrl = data?['imageUrl'];
 
               return Container(
                 width: double.infinity,
                 color: Colors.white,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
                 child: Row(
                   children: [
                     CircleAvatar(
                       radius: 35,
-                      backgroundImage: imageUrl != null &&
-                              imageUrl.toString().startsWith('http')
+                      backgroundImage: imageUrl != null && imageUrl.toString().startsWith('http')
                           ? NetworkImage(imageUrl)
                           : const NetworkImage(
                               'https://cdn-icons-png.flaticon.com/512/149/149071.png'),
@@ -114,8 +110,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               style: const TextStyle(
                                   fontSize: 18, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
-                          Text(email,
-                              style: const TextStyle(color: Colors.grey)),
+                          Text(email, style: const TextStyle(color: Colors.grey)),
                         ],
                       ),
                     ),
@@ -134,7 +129,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 }
 
                 if (snapshot.hasError) {
-                  debugPrint("⚠️ Error fetching posts: \${snapshot.error}");
+                  debugPrint("⚠️ Error fetching posts: ${snapshot.error}");
                 }
 
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -147,7 +142,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 }
 
                 final posts = snapshot.data!.docs;
-                debugPrint("✅ Posts found: \${posts.length}");
+                debugPrint("✅ Posts found: ${posts.length}");
 
                 return ListView(
                   padding: const EdgeInsets.all(16),
@@ -164,8 +159,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildPostCard(
-      BuildContext context, Map<String, dynamic> post, String postId) {
+  Widget _buildPostCard(BuildContext context, Map<String, dynamic> post, String postId) {
     final timestamp = (post['timestamp'] as Timestamp).toDate();
 
     return Card(
@@ -175,11 +169,9 @@ class _ProfilePageState extends State<ProfilePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (post['imageUrl'] != null &&
-              post['imageUrl'].toString().startsWith('http'))
+          if (post['imageUrl'] != null && post['imageUrl'].toString().startsWith('http'))
             ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               child: Image.network(
                 post['imageUrl'],
                 height: 200,
@@ -245,7 +237,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "📍 \${post['location']}   •   🕒 \${_formatTimeAgo(timestamp)}",
+                  "📍 ${post['location']}   •   🕒 ${_formatTimeAgo(timestamp)}",
                   style: const TextStyle(color: Colors.grey, fontSize: 12),
                 ),
               ],
@@ -258,8 +250,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
   String _formatTimeAgo(DateTime dateTime) {
     final diff = DateTime.now().difference(dateTime);
-    if (diff.inMinutes < 60) return '\${diff.inMinutes} min ago';
-    if (diff.inHours < 24) return '\${diff.inHours} hr ago';
-    return '\${diff.inDays} days ago';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours} hr ago';
+    return '${diff.inDays} days ago';
   }
 }

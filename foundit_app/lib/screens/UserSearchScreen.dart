@@ -2,16 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
-import 'package:collection/collection.dart';
-import 'chat_screen.dart'; // Make sure to import your ChatScreen
+import 'chat_screen.dart';
 
-class UserSelectionScreen extends StatelessWidget {
-  const UserSelectionScreen({super.key});
+class UserSearchScreen extends StatefulWidget {
+  const UserSearchScreen({super.key});
+
+  @override
+  State<UserSearchScreen> createState() => _UserSearchScreenState();
+}
+
+class _UserSearchScreenState extends State<UserSearchScreen> {
+  String _searchQuery = '';
 
   @override
   Widget build(BuildContext context) {
     final currentUser = fb_auth.FirebaseAuth.instance.currentUser;
-
     if (currentUser == null) {
       return const Scaffold(
         body: Center(child: Text('Please login first')),
@@ -19,69 +24,106 @@ class UserSelectionScreen extends StatelessWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Select User')),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      backgroundColor: const Color(0xFFeff3ff),
+      appBar: AppBar(
+        title: const Text('Search Users'),
+        centerTitle: true,
+        backgroundColor: const Color(0xFF3182bd),
+        foregroundColor: Colors.white,
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: TextField(
+              decoration: const InputDecoration(
+                hintText: 'Search by name or email...',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('users').snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text('No users found.'));
-          }
+                final allUsers = snapshot.data!.docs
+                    .where((doc) => doc.id != currentUser.uid)
+                    .where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final name = '${data['firstName'] ?? ''} ${data['lastName'] ?? ''}'.toLowerCase();
+                      final email = data['email']?.toLowerCase() ?? '';
+                      return name.contains(_searchQuery) || email.contains(_searchQuery);
+                    })
+                    .toList();
 
-          final users = snapshot.data!.docs
-              .where((u) => u.id != currentUser.uid)
-              .toList();
+                if (allUsers.isEmpty) {
+                  return const Center(child: Text('No users found.'));
+                }
 
-          return ListView(
-            children: users.map((doc) {
-              final userData = doc.data() as Map<String, dynamic>;
-              final displayName = userData['displayName'] ?? 'Unknown';
-              final email = userData['email'] ?? '';
+                return ListView.builder(
+                  itemCount: allUsers.length,
+                  itemBuilder: (context, index) {
+                    final doc = allUsers[index];
+                    final data = doc.data() as Map<String, dynamic>;
+                    final fullName = '${data['firstName'] ?? ''} ${data['lastName'] ?? ''}'.trim();
+                    final email = data['email'] ?? '';
+                    final imageUrl = data['imageUrl'];
+                    final otherUserId = doc.id;
 
-              return ListTile(
-                leading: const CircleAvatar(child: Icon(Icons.person)),
-                title: Text(displayName),
-                subtitle: Text(email),
-                onTap: () => _startChatWithUser(context, doc.id),
-              );
-            }).toList(),
-          );
-        },
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
+                          child: imageUrl == null ? const Icon(Icons.person) : null,
+                          backgroundColor: const Color(0xFF6baed6),
+                        ),
+                        title: Text(fullName.isNotEmpty ? fullName : 'Unknown'),
+                        subtitle: Text(email),
+                        onTap: () => _startChatWithUser(context, otherUserId, currentUser.uid),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          )
+        ],
       ),
     );
   }
 
-  void _startChatWithUser(BuildContext context, String otherUserId) async {
-    final currentUser = fb_auth.FirebaseAuth.instance.currentUser;
-    if (currentUser == null) return;
+  void _startChatWithUser(BuildContext context, String otherUserId, String currentUserId) async {
+    final users = [currentUserId, otherUserId]..sort(); // Ensure consistent order
 
-    final currentUserId = currentUser.uid;
-    final users = [currentUserId, otherUserId]
-      ..sort(); // Ensure consistent order
+    final chatRef = FirebaseFirestore.instance.collection('chats');
 
-    // Search for existing chat with the exact userIds array
-    final query = await FirebaseFirestore.instance
-        .collection('chats')
+    final existingChats = await chatRef
         .where('userIds', isEqualTo: users)
         .limit(1)
         .get();
 
     String chatId;
-    if (query.docs.isNotEmpty) {
-      chatId = query.docs.first.id;
+    if (existingChats.docs.isNotEmpty) {
+      chatId = existingChats.docs.first.id;
     } else {
-      // Create new chat
-      final doc = await FirebaseFirestore.instance.collection('chats').add({
+      final newChatDoc = await chatRef.add({
         'userIds': users,
         'createdAt': FieldValue.serverTimestamp(),
         'lastMessage': '',
         'lastMessageTime': FieldValue.serverTimestamp(),
       });
-      chatId = doc.id;
+      chatId = newChatDoc.id;
     }
+
+    if (!mounted) return;
 
     Navigator.pushReplacement(
       context,

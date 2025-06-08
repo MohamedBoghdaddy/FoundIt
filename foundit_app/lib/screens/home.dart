@@ -83,19 +83,20 @@ class HomeScreen extends StatelessWidget {
                     const SizedBox(height: 20),
                     SizedBox(
                       width: double.infinity,
-                      child: OutlinedButton.icon(
+                      child: ElevatedButton.icon(
                         onPressed: () =>
                             Navigator.pushNamed(context, '/register'),
                         icon: const Icon(Icons.app_registration_rounded),
                         label: const Text("Register"),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color(0xFF3182bd)),
-                          foregroundColor: Color(0xFF3182bd),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF6baed6),
+                          foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           textStyle: const TextStyle(fontSize: 18),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
+                          elevation: 3,
                         ),
                       ),
                     ),

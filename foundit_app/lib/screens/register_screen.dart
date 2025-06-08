@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -168,22 +169,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 child: Column(
                   children: [
                     GestureDetector(
-                        onTap: _pickImage, child: _buildProfileImage()),
+                      onTap: _pickImage,
+                      child: _buildProfileImage(),
+                    ),
                     const SizedBox(height: 20),
                     TextFormField(
-                      decoration:
-                          const InputDecoration(labelText: "First Name"),
-                      validator: (val) => val != null && val.trim().isNotEmpty
-                          ? null
-                          : "Enter first name",
+                      decoration: const InputDecoration(labelText: "First Name"),
+                      validator: (val) =>
+                          val != null && val.trim().isNotEmpty ? null : "Enter first name",
                       onChanged: (val) => firstName = val.trim(),
                     ),
                     const SizedBox(height: 10),
                     TextFormField(
                       decoration: const InputDecoration(labelText: "Last Name"),
-                      validator: (val) => val != null && val.trim().isNotEmpty
-                          ? null
-                          : "Enter last name",
+                      validator: (val) =>
+                          val != null && val.trim().isNotEmpty ? null : "Enter last name",
                       onChanged: (val) => lastName = val.trim(),
                     ),
                     const SizedBox(height: 10),
@@ -207,8 +207,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const SizedBox(height: 20),
                     if (otpSent)
                       TextFormField(
-                        decoration:
-                            const InputDecoration(labelText: "Enter OTP"),
+                        decoration: const InputDecoration(labelText: "Enter OTP"),
                         onChanged: (val) => otp = val.trim(),
                       ),
                     const SizedBox(height: 20),
@@ -226,9 +225,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         minimumSize: const Size.fromHeight(50),
                       ),
-                      child: Text(canResendOtp
-                          ? "Send OTP"
-                          : "Resend OTP in $countdownSeconds s"),
+                      child: Text(
+                        canResendOtp
+                            ? "Send OTP"
+                            : "Resend OTP in $countdownSeconds s",
+                      ),
                     ),
                     const SizedBox(height: 10),
                     if (otpSent && !otpVerified)
