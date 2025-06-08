@@ -19,8 +19,19 @@ class ChatMessagesProvider extends ChangeNotifier {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .listen((snapshot) {
-      final msgs = snapshot.docs.map((doc) {
+      messages = snapshot.docs.map((doc) {
         final data = doc.data();
+
+        if (data['type'] == 'file' && data['file'] != null) {
+          return types.FileMessage(
+            author: types.User(id: data['authorId']),
+            createdAt: (data['createdAt'] as Timestamp).millisecondsSinceEpoch,
+            id: doc.id,
+            name: data['file']['name'],
+            size: data['file']['size'],
+            uri: data['file']['uri'],
+          );
+        }
 
         return types.TextMessage(
           author: types.User(id: data['authorId']),
@@ -30,8 +41,7 @@ class ChatMessagesProvider extends ChangeNotifier {
         );
       }).toList();
 
-      messages = msgs;
       notifyListeners();
-    });
+    }, onError: (e) => debugPrint("Error fetching messages: $e"));
   }
 }

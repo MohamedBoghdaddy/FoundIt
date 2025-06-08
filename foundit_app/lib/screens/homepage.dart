@@ -4,14 +4,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'edit_post_screen.dart';
 import 'questionnaire_screen.dart';
 
-class FeedPage extends StatefulWidget {
-  const FeedPage({super.key});
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
 
   @override
-  State<FeedPage> createState() => _FeedPageState();
+  State<HomePage> createState() => _HomePageState();
 }
 
-class _FeedPageState extends State<FeedPage>
+class _HomePageState extends State<HomePage>
     with SingleTickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
   final int _limitIncrement = 5;
@@ -19,20 +19,19 @@ class _FeedPageState extends State<FeedPage>
   String _filter = 'all';
   String _sortBy = 'newest';
   late AnimationController _animationController;
+
   final currentUser = FirebaseAuth.instance.currentUser;
 
   @override
   void initState() {
     super.initState();
     _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
+        vsync: this, duration: const Duration(milliseconds: 300));
     _scrollController.addListener(_scrollListener);
   }
 
   void _scrollListener() {
-    if (_scrollController.position.pixels ==
+    if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent) {
       setState(() => _limit += _limitIncrement);
     }
@@ -101,13 +100,8 @@ class _FeedPageState extends State<FeedPage>
         .update({'score': score});
   }
 
-  Widget _buildVoteButton(
-    String postId,
-    String type,
-    String? userReaction,
-    IconData icon,
-    Color activeColor,
-  ) {
+  Widget _buildVoteButton(String postId, String type, String? userReaction,
+      IconData icon, Color color) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('posts')
@@ -121,22 +115,14 @@ class _FeedPageState extends State<FeedPage>
 
         return ScaleTransition(
           scale: CurvedAnimation(
-            parent: _animationController,
-            curve: Curves.easeOutBack,
-          ),
+              parent: _animationController, curve: Curves.easeOutBack),
           child: TextButton.icon(
             onPressed: () => _handleVote(postId, type),
             style: TextButton.styleFrom(
-              foregroundColor: isActive ? activeColor : Colors.grey,
+              foregroundColor: isActive ? color : Colors.grey,
             ),
-            icon: Icon(icon, size: 24),
-            label: Text(
-              '$count',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: isActive ? activeColor : Colors.grey[600],
-              ),
-            ),
+            icon: Icon(icon),
+            label: Text('$count'),
           ),
         );
       },
@@ -146,19 +132,17 @@ class _FeedPageState extends State<FeedPage>
   Widget _buildPostCard(
       Map<String, dynamic> data, String postId, String? userReaction) {
     final title = data['title'] ?? '';
-    final type = data['type'] ?? 'unknown';
+    final type = data['type'] ?? '';
     final location = data['location'] ?? '';
     final timestamp = (data['timestamp'] as Timestamp).toDate();
     final imageUrl = data['imageUrl'] ?? '';
     final ownerId = data['userId'];
-
-    final showQuestionnaire =
-        type == 'lost' && ownerId != FirebaseAuth.instance.currentUser?.uid;
+    final showQuestionnaire = type == 'lost' && ownerId != currentUser?.uid;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 5,
+      elevation: 3,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -188,14 +172,11 @@ class _FeedPageState extends State<FeedPage>
                         icon: const Icon(Icons.edit),
                         onPressed: () {
                           Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => EditPostScreen(
-                                postId: postId,
-                                postData: data,
-                              ),
-                            ),
-                          );
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => EditPostScreen(
+                                    postId: postId, postData: data),
+                              ));
                         },
                       ),
                       IconButton(
@@ -235,7 +216,9 @@ class _FeedPageState extends State<FeedPage>
                             context,
                             MaterialPageRoute(
                               builder: (_) => QuestionnaireScreen(
-                                  questionnaireId: postId, postId: postId),
+                                questionnaireId: postId,
+                                postId: postId,
+                              ),
                             ),
                           );
                         },
@@ -254,10 +237,8 @@ class _FeedPageState extends State<FeedPage>
     return StreamBuilder<QuerySnapshot>(
       stream: getFilteredPosts(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+        if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
-        }
-
         final posts = snapshot.data!.docs;
 
         return ListView.builder(
@@ -268,9 +249,8 @@ class _FeedPageState extends State<FeedPage>
             final postId = posts[index].id;
             return FutureBuilder<String?>(
               future: _getUserReaction(postId),
-              builder: (context, snapshot) {
-                final userReaction = snapshot.data;
-                return _buildPostCard(data, postId, userReaction);
+              builder: (context, snap) {
+                return _buildPostCard(data, postId, snap.data);
               },
             );
           },
@@ -284,6 +264,31 @@ class _FeedPageState extends State<FeedPage>
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     return '${diff.inDays}d ago';
+  }
+
+  Widget _buildSortMenu() {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.sort),
+      initialValue: _sortBy,
+      onSelected: (val) => setState(() => _sortBy = val),
+      itemBuilder: (ctx) => const [
+        PopupMenuItem(value: 'newest', child: Text('Newest First')),
+        PopupMenuItem(value: 'upvotes', child: Text('Most Popular')),
+      ],
+    );
+  }
+
+  Widget _buildFilterMenu() {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.filter_list),
+      initialValue: _filter,
+      onSelected: (val) => setState(() => _filter = val),
+      itemBuilder: (ctx) => const [
+        PopupMenuItem(value: 'all', child: Text('All')),
+        PopupMenuItem(value: 'lost', child: Text('Lost')),
+        PopupMenuItem(value: 'found', child: Text('Found')),
+      ],
+    );
   }
 
   @override
@@ -320,55 +325,6 @@ class _FeedPageState extends State<FeedPage>
         child: const Icon(Icons.add),
       ),
       body: _buildPostList(),
-    );
-  }
-
-  Widget _buildSortMenu() {
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.sort),
-      initialValue: _sortBy,
-      onSelected: (val) => setState(() => _sortBy = val),
-      itemBuilder: (ctx) => const [
-        PopupMenuItem(
-          value: 'newest',
-          child: ListTile(
-            leading: Icon(Icons.new_releases),
-            title: Text('Newest First'),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'upvotes',
-          child: ListTile(
-            leading: Icon(Icons.trending_up),
-            title: Text('Most Popular'),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFilterMenu() {
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.filter_list),
-      initialValue: _filter,
-      onSelected: (val) => setState(() => _filter = val),
-      itemBuilder: (ctx) => const [
-        PopupMenuItem(value: 'all', child: Text('All Posts')),
-        PopupMenuItem(
-          value: 'lost',
-          child: ListTile(
-            leading: Icon(Icons.search_off, color: Colors.red),
-            title: Text('Lost Items'),
-          ),
-        ),
-        PopupMenuItem(
-          value: 'found',
-          child: ListTile(
-            leading: Icon(Icons.search, color: Colors.green),
-            title: Text('Found Items'),
-          ),
-        ),
-      ],
     );
   }
 }

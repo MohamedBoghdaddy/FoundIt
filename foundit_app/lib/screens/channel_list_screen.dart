@@ -4,6 +4,7 @@ import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:collection/collection.dart';
 import 'chat_screen.dart';
+import 'userSearchScreen.dart'; // Keep this import if used elsewhere
 
 class ChannelListScreen extends StatefulWidget {
   const ChannelListScreen({super.key});
@@ -25,6 +26,15 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
         .snapshots();
   }
 
+  void _showUserSelection() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const UserSelectionScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (firebaseUser == null) {
@@ -36,7 +46,14 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
     final currentUser = types.User(id: firebaseUser!.uid);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My Chats')),
+      backgroundColor: const Color(0xFFeff3ff),
+      appBar: AppBar(
+        title: const Text('My Chats'),
+        centerTitle: true,
+        backgroundColor: const Color(0xFF3182bd),
+        foregroundColor: Colors.white,
+        elevation: 4,
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: _getUserChats(),
         builder: (context, snapshot) {
@@ -44,49 +61,85 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text('No chats found.'));
+            return const Center(
+              child: Text(
+                'No chats found. Tap + to start a new conversation!',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+            );
           }
 
           final chats = snapshot.data!.docs;
 
           return ListView.builder(
             itemCount: chats.length,
+            padding: const EdgeInsets.symmetric(vertical: 8),
             itemBuilder: (context, index) {
               final chatDoc = chats[index];
               final chatData = chatDoc.data() as Map<String, dynamic>;
-              final userIds = chatData['userIds'] as List<dynamic>? ?? [];
+              final List<dynamic> userIds = chatData['userIds'] ?? [];
 
-              final otherUserId = userIds.firstWhereOrNull(
-                (id) => id != currentUser.id,
-              );
+              final otherUserId =
+                  userIds.firstWhereOrNull((id) => id != currentUser.id);
 
               if (otherUserId == null) return const SizedBox();
 
               return FutureBuilder<DocumentSnapshot>(
                 future: _firestore.collection('users').doc(otherUserId).get(),
                 builder: (context, userSnapshot) {
+                  if (userSnapshot.connectionState == ConnectionState.waiting) {
+                    return const ListTile(
+                      leading: CircleAvatar(),
+                      title: Text("Loading..."),
+                    );
+                  }
+
                   if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-                    return const ListTile(title: Text("Loading user..."));
+                    return const ListTile(
+                      title: Text("User not found"),
+                    );
                   }
 
                   final userData =
                       userSnapshot.data!.data() as Map<String, dynamic>;
-                  final firstName =
-                      userData['firstName']?.toString() ?? 'No Name';
-                  final avatarUrl = userData['imageUrl'];
+
+                  // 🔁 Fallback displayName logic
+                  String displayName = '';
+                  final firstName = userData['firstName'] ?? '';
+                  final lastName = userData['lastName'] ?? '';
+                  displayName = '$firstName $lastName'.trim();
+
+                  if (displayName.isEmpty) {
+                    final email = userData['email'] as String?;
+                    if (email != null && email.isNotEmpty) {
+                      displayName = email.split('@').first;
+                    } else {
+                      displayName = 'Unknown';
+                    }
+                  }
+
+                  final imageUrl = userData['imageUrl'];
                   final isOnline = userData['isOnline'] == true;
 
                   return Card(
                     margin:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
                       leading: CircleAvatar(
+                        radius: 24,
                         backgroundImage:
-                            avatarUrl != null ? NetworkImage(avatarUrl) : null,
-                        child:
-                            avatarUrl == null ? const Icon(Icons.person) : null,
+                            imageUrl != null ? NetworkImage(imageUrl) : null,
+                        backgroundColor: const Color(0xFF6baed6),
+                        child: imageUrl == null
+                            ? const Icon(Icons.person, color: Colors.white)
+                            : null,
                       ),
-                      title: Text(firstName),
+                      title: Text(displayName),
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -105,10 +158,13 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
                             builder: (context, typingSnapshot) {
                               if (typingSnapshot.hasData &&
                                   typingSnapshot.data!.exists &&
-                                  (typingSnapshot.data!['isTyping'] ?? false)) {
+                                  (typingSnapshot.data!['isTyping'] == true)) {
                                 return const Text(
                                   'Typing...',
-                                  style: TextStyle(color: Colors.grey),
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                    fontStyle: FontStyle.italic,
+                                  ),
                                 );
                               }
                               return const SizedBox.shrink();
@@ -116,10 +172,13 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
                           ),
                         ],
                       ),
-                      trailing: Icon(
-                        Icons.circle,
-                        color: isOnline ? Colors.green : Colors.grey,
-                        size: 10,
+                      trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.circle,
+                              color: isOnline ? Colors.green : Colors.grey,
+                              size: 12),
+                        ],
                       ),
                       onTap: () {
                         Navigator.push(
@@ -141,156 +200,9 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
+        backgroundColor: const Color(0xFF3182bd),
         onPressed: _showUserSelection,
         child: const Icon(Icons.add),
-      ),
-    );
-  }
-
-  void _showUserSelection() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => const SearchUserSheet(),
-    );
-  }
-}
-
-class SearchUserSheet extends StatefulWidget {
-  const SearchUserSheet({super.key});
-
-  @override
-  State<SearchUserSheet> createState() => _SearchUserSheetState();
-}
-
-class _SearchUserSheetState extends State<SearchUserSheet> {
-  String searchQuery = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final currentUser = fb_auth.FirebaseAuth.instance.currentUser;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            autofocus: true,
-            decoration: InputDecoration(
-              hintText: "Search users...",
-              prefixIcon: const Icon(Icons.search),
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            onChanged: (val) => setState(() => searchQuery = val.toLowerCase()),
-          ),
-          const SizedBox(height: 10),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream:
-                  FirebaseFirestore.instance.collection('users').snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final users = snapshot.data!.docs
-                    .where((doc) =>
-                        doc.id != currentUser?.uid &&
-                        (doc['firstName']
-                                ?.toLowerCase()
-                                .contains(searchQuery) ??
-                            false))
-                    .toList();
-
-                if (users.isEmpty) {
-                  return const Center(child: Text("No matching users found"));
-                }
-
-                return ListView.builder(
-                  itemCount: users.length,
-                  itemBuilder: (context, index) {
-                    final userDoc = users[index];
-                    final userData = userDoc.data() as Map<String, dynamic>;
-
-                    final fullName =
-                        "${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}"
-                            .trim();
-                    final imageUrl = userData['imageUrl'];
-                    final email = userData['email'] ?? '';
-
-                    return Card(
-                      elevation: 2,
-                      margin: const EdgeInsets.symmetric(vertical: 6),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundImage:
-                              imageUrl != null ? NetworkImage(imageUrl) : null,
-                          child: imageUrl == null
-                              ? const Icon(Icons.person)
-                              : null,
-                        ),
-                        title: Text(fullName.isNotEmpty ? fullName : 'No Name'),
-                        subtitle: Text(email),
-                        onTap: () async {
-                          if (currentUser == null) return;
-
-                          final selectedUserId = userDoc.id;
-                          final currentUserTyped =
-                              types.User(id: currentUser.uid);
-
-                          final chatRef =
-                              FirebaseFirestore.instance.collection('chats');
-                          final possibleChats = await chatRef
-                              .where('userIds', arrayContains: currentUser.uid)
-                              .get();
-
-                          final existingChat =
-                              possibleChats.docs.firstWhereOrNull(
-                            (chatDoc) {
-                              final userIds =
-                                  List<String>.from(chatDoc['userIds']);
-                              return userIds.contains(selectedUserId) &&
-                                  userIds.length == 2;
-                            },
-                          );
-
-                          String chatId;
-                          if (existingChat != null) {
-                            chatId = existingChat.id;
-                          } else {
-                            final newChatDoc = await chatRef.add({
-                              'userIds': [currentUser.uid, selectedUserId],
-                              'createdAt': FieldValue.serverTimestamp(),
-                              'lastMessage': '',
-                            });
-                            chatId = newChatDoc.id;
-                          }
-
-                          if (!mounted) return;
-                          Navigator.pop(context);
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ChatScreen(
-                                chatId: chatId,
-                                currentUser: currentUserTyped,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
       ),
     );
   }

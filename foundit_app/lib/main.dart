@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+
+import 'features/auth/bloc/auth_cubit.dart';
+import 'services/auth_service.dart';
 
 import 'screens/channel_list_screen.dart' as channel_list;
 import 'screens/home.dart'; // contains HomeScreen
@@ -25,7 +29,12 @@ void main() async {
     ),
   );
 
-  runApp(const MyApp());
+  runApp(
+    BlocProvider(
+      create: (_) => AuthCubit(AuthService()),
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -72,11 +81,11 @@ class MyApp extends StatelessWidget {
       theme: themeData,
       initialRoute: '/',
       routes: {
-        '/': (context) => const SplashScreenRedirect(),
-        // '/welcome': (context) => const HomeScreen(),
+        '/': (context) => const HomeScreen(),
+        '/welcome': (context) => const HomeScreen(),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
-        '/home': (context) => const FeedPage(),
+        '/home': (context) => const HomePage(),
         '/createPost': (context) => const CreatePostScreen(),
         '/profile': (context) => const ProfilePage(),
         '/editPost': (context) => const Placeholder(),

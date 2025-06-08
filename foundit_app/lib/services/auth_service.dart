@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -7,6 +8,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   /// 🔐 Send OTP by storing in Firestore
   Future<void> sendFirebaseOtp(String email) async {
@@ -29,17 +31,22 @@ class AuthService {
     return savedOtp == inputOtp;
   }
 
-  /// ✅ Upload profile image to Firebase Storage
+  /// ✅ Upload profile image (Mobile)
   Future<String> uploadProfileImage(File imageFile, String userId) async {
-    final storageRef =
-        FirebaseStorage.instance.ref().child('profile_images/$userId.jpg');
+    final storageRef = _storage.ref().child('profile_images/$userId.jpg');
     final uploadTask = storageRef.putFile(imageFile);
     final snapshot = await uploadTask.whenComplete(() {});
-    final downloadUrl = await snapshot.ref.getDownloadURL();
-    return downloadUrl;
+    return await snapshot.ref.getDownloadURL();
   }
 
-  /// ✅ Register user and store role flags plus profile image URL
+  /// ✅ Upload profile image (Web)
+  Future<String> uploadProfileBytes(Uint8List bytes, String userId) async {
+    final ref = _storage.ref().child('profile_images/$userId.jpg');
+    await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+    return await ref.getDownloadURL();
+  }
+
+  /// ✅ Register user and store profile in Firestore
   Future<void> registerUser(
     String email,
     String password,
@@ -58,17 +65,12 @@ class AuthService {
       'createdAt': Timestamp.now(),
       'firstName': firstName,
       'lastName': lastName,
-      'imageUrl': imageUrl ?? 'https://cdn-icons-png.flaticon.com/512/149/149071.png',
- });
+      'imageUrl':
+          imageUrl ?? 'https://cdn-icons-png.flaticon.com/512/149/149071.png',
+    });
   }
 
-  /// 🔁 Generate 6-digit OTP
-  String _generateOtp() {
-    final random = Random();
-    return (100000 + random.nextInt(900000)).toString();
-  }
-
-  /// 🔓 Login user with email and password
+  /// 🔓 Login user
   Future<void> loginUser(String email, String password) async {
     await _auth.signInWithEmailAndPassword(
       email: email,
@@ -76,7 +78,19 @@ class AuthService {
     );
   }
 
+  /// 🚪 Logout user
   Future<void> logoutUser() async {
     await _auth.signOut();
+  }
+
+  /// 📧 Reset password via email
+  Future<void> resetPassword(String email) async {
+    await _auth.sendPasswordResetEmail(email: email);
+  }
+
+  /// 🔁 Generate 6-digit OTP
+  String _generateOtp() {
+    final random = Random();
+    return (100000 + random.nextInt(900000)).toString();
   }
 }
