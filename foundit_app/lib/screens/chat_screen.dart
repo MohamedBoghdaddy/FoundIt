@@ -1,28 +1,23 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter_chat_ui/flutter_chat_ui.dart';
-import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
-import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
-import 'package:scroll_to_index/scroll_to_index.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:uuid/uuid.dart';
-import 'package:open_file/open_file.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
-import '../providers/chat_messages_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ChatScreen extends StatefulWidget {
-  final types.User currentUser;
-  final String chatId;
+  final String itemId;
+  final String currentUserId;
+  final String currentUserName;
+  final String? currentUserAvatar;
 
   const ChatScreen({
     super.key,
-    required this.currentUser,
-    required this.chatId,
+    required this.itemId,
+    required this.currentUserId,
+    required this.currentUserName,
+    this.currentUserAvatar,
   });
 
   @override
@@ -30,172 +25,93 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
-  late AutoScrollController _scrollController;
-  final TextEditingController _textController = TextEditingController();
+  final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  Timer? _pollingTimer;
+  List<Map<String, dynamic>> messages = [];
+  bool _isLoading = true;
+  bool _isSending = false;
   bool showEmojiPicker = false;
-  Timer? _debounce;
+  bool _isTyping = false;
   Timer? _typingDebounce;
-
-  String? otherUserId;
-  String otherUserName = 'Loading...';
-  String? otherUserAvatarUrl;
 
   @override
   void initState() {
     super.initState();
-    _scrollController = AutoScrollController();
     WidgetsBinding.instance.addObserver(this);
-    _setUserOnline(true);
-    _fetchOtherUserInfo();
-    _markMessagesAsRead();
-    _textController.addListener(_handleTextChanged);
+    _fetchMessages();
+    // Set up polling every 3 seconds
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      _fetchMessages();
+    });
+    _controller.addListener(_handleTyping);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _setUserOnline(false);
-    _setTyping(false);
-    _debounce?.cancel();
+    _pollingTimer?.cancel();
     _typingDebounce?.cancel();
-    _textController.removeListener(_handleTextChanged);
-    _textController.dispose();
+    _controller.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  void _handleTextChanged() {
-    if (_textController.text.isNotEmpty) {
-      _setTyping(true);
-    } else {
-      _setTyping(false);
+  void _handleTyping() {
+    if (_controller.text.isNotEmpty && !_isTyping) {
+      setState(() => _isTyping = true);
+      _resetTypingDebounce();
+    } else if (_controller.text.isEmpty && _isTyping) {
+      setState(() => _isTyping = false);
     }
   }
 
-  void _setUserOnline(bool online) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.currentUser.id)
-          .update({
-        'isOnline': online,
-        'lastSeen': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      debugPrint("⚠️ Error setting online status: $e");
-    }
+  void _resetTypingDebounce() {
+    _typingDebounce?.cancel();
+    _typingDebounce = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() => _isTyping = false);
+      }
+    });
   }
 
-  void _setTyping(bool typing) {
+  Future<void> _fetchMessages() async {
     try {
-      if (typing) {
-        FirebaseFirestore.instance
-            .collection('chats')
-            .doc(widget.chatId)
-            .collection('typingStatus')
-            .doc(widget.currentUser.id)
-            .set({'isTyping': typing});
-      } else {
-        _typingDebounce?.cancel();
-        _typingDebounce = Timer(const Duration(seconds: 1), () {
-          FirebaseFirestore.instance
-              .collection('chats')
-              .doc(widget.chatId)
-              .collection('typingStatus')
-              .doc(widget.currentUser.id)
-              .set({'isTyping': typing});
+      final newMessages = await getChatHistory(widget.itemId);
+      if (mounted) {
+        setState(() {
+          messages = newMessages;
+          _isLoading = false;
         });
+        _scrollToBottom();
       }
     } catch (e) {
-      debugPrint("⚠️ Error setting typing status: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+      _showError('Failed to load messages: $e');
     }
   }
 
-  Future<void> _fetchOtherUserInfo() async {
+  Future<void> _sendMessage() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty || _isSending) return;
+
+    setState(() {
+      _isSending = true;
+      _isTyping = false;
+    });
+    
     try {
-      final chatDoc = await FirebaseFirestore.instance
-          .collection('chats')
-          .doc(widget.chatId)
-          .get();
-
-      if (chatDoc.exists) {
-        final userIds = List<String>.from(chatDoc['userIds']);
-        otherUserId = userIds.firstWhere((id) => id != widget.currentUser.id);
-
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(otherUserId)
-            .get();
-
-        if (userDoc.exists) {
-          final data = userDoc.data()!;
-          final firstName = data['firstName'] ?? '';
-          final lastName = data['lastName'] ?? '';
-          final fullName = '$firstName $lastName'.trim();
-
-          setState(() {
-            otherUserName = fullName.isNotEmpty ? fullName : 'User';
-            otherUserAvatarUrl = data['imageUrl'];
-          });
-        } else {
-          setState(() => otherUserName = 'User');
-        }
+      await sendMessage(widget.itemId, widget.currentUserId, text);
+      _controller.clear();
+      await _fetchMessages(); // Refresh messages after sending
+    } catch (e) {
+      _showError('Failed to send message: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isSending = false);
       }
-    } catch (e) {
-      debugPrint("⚠️ Error fetching user info: $e");
-      setState(() => otherUserName = 'User');
-    }
-  }
-
-  Future<void> _markMessagesAsRead() async {
-    try {
-      final messagesRef = FirebaseFirestore.instance
-          .collection('chats')
-          .doc(widget.chatId)
-          .collection('messages');
-
-      final snapshot = await messagesRef
-          .where('authorId', isNotEqualTo: widget.currentUser.id)
-          .where('isRead', isEqualTo: false)
-          .get();
-
-      final batch = FirebaseFirestore.instance.batch();
-      for (var doc in snapshot.docs) {
-        batch.update(doc.reference, {'isRead': true});
-      }
-      await batch.commit();
-    } catch (e) {
-      debugPrint("⚠️ Error marking messages as read: $e");
-    }
-  }
-
-  Future<void> _handleSendPressed(types.PartialText message) async {
-    try {
-      if (message.text.trim().isEmpty) return;
-      setState(() => showEmojiPicker = false);
-
-      await FirebaseFirestore.instance
-          .collection('chats')
-          .doc(widget.chatId)
-          .collection('messages')
-          .add({
-        'authorId': widget.currentUser.id,
-        'text': message.text,
-        'createdAt': Timestamp.now(),
-        'isRead': false,
-      });
-
-      await FirebaseFirestore.instance
-          .collection('chats')
-          .doc(widget.chatId)
-          .update({
-        'lastMessage': message.text,
-        'lastMessageTime': FieldValue.serverTimestamp(),
-      });
-
-      _textController.clear();
-      _setTyping(false);
-    } catch (e) {
-      debugPrint("⚠️ Error sending message: $e");
     }
   }
 
@@ -205,62 +121,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final image = await picker.pickImage(source: ImageSource.gallery);
       if (image == null) return;
 
-      final bytes = await image.readAsBytes();
-      final fileName = const Uuid().v4();
-      final filePath = '${(await getTemporaryDirectory()).path}/$fileName.jpg';
-      final file = File(filePath)..writeAsBytesSync(bytes);
-
-      await FirebaseFirestore.instance
-          .collection('chats')
-          .doc(widget.chatId)
-          .collection('messages')
-          .add({
-        'authorId': widget.currentUser.id,
-        'file': {
-          'name': image.name,
-          'size': bytes.length,
-          'uri': file.path,
-        },
-        'type': 'file',
-        'createdAt': Timestamp.now(),
-        'isRead': false,
-      });
-
-      await FirebaseFirestore.instance
-          .collection('chats')
-          .doc(widget.chatId)
-          .update({
-        'lastMessage': '[Attachment]',
-        'lastMessageTime': FieldValue.serverTimestamp(),
-      });
+      // In a real app, you would upload the image to your server
+      // and then send the URL as a message
+      final message = "📷 [Image attachment] ${image.name}";
+      _controller.text = message;
+      _sendMessage();
     } catch (e) {
-      debugPrint("⚠️ Error sending image attachment: $e");
-    }
-  }
-
-  void _handleReaction(String emoji, String messageId) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('chats')
-          .doc(widget.chatId)
-          .collection('messages')
-          .doc(messageId)
-          .set({
-        'reactions.${widget.currentUser.id}': emoji,
-      }, SetOptions(merge: true));
-    } catch (e) {
-      debugPrint("⚠️ Error adding reaction: $e");
-    }
-  }
-
-  void _onMessageTap(types.Message message) {
-    if (message is types.FileMessage) {
-      final uri = message.uri;
-      if (uri.startsWith('/')) {
-        OpenFile.open(uri);
-      } else {
-        launchUrl(Uri.parse(uri));
-      }
+      _showError('Failed to attach image: $e');
     }
   }
 
@@ -342,12 +209,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         "Let's meet on **$formattedDate** at **$formattedTime** "
                         "in front of **$location** to return the item.";
 
-                    _handleSendPressed(types.PartialText(text: messageText));
+                    _controller.text = messageText;
+                    _sendMessage();
                     Navigator.pop(context);
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text("Please select date, time, and location."),
+                        content:
+                            Text("Please select date, time, and location."),
+                        duration: Duration(seconds: 2),
                       ),
                     );
                   }
@@ -361,118 +231,265 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => ChatMessagesProvider(widget.chatId, widget.currentUser),
-      child: Consumer<ChatMessagesProvider>(
-        builder: (context, provider, _) {
-          return Scaffold(
-            body: Column(
-              children: [
-                Expanded(
-                  child: Chat(
-                    messages: provider.messages,
-                    user: widget.currentUser,
-                    onSendPressed: _handleSendPressed,
-                    onAttachmentPressed: _handleAttachmentPressed,
-                    inputOptions: InputOptions(textEditingController: _textController),
-                    onMessageTap: (context, message) => _onMessageTap(message),
-                    onMessageLongPress: (context, message) async {
-                      final emoji = await showModalBottomSheet<String>(
-                        context: context,
-                        builder: (context) => Wrap(
-                          children: ['❤️', '😂', '👍', '🎉', '😮', '😢'].map((e) {
-                            return ListTile(
-                              title: Text(e, style: const TextStyle(fontSize: 24)),
-                              onTap: () => Navigator.pop(context, e),
-                            );
-                          }).toList(),
-                        ),
-                      );
-                      if (emoji != null && message is types.TextMessage) {
-                        _handleReaction(emoji, message.id);
-                      }
-                    },
-                    scrollController: _scrollController,
-                    showUserAvatars: true,
-                    showUserNames: true,
-                    theme: const DefaultChatTheme(
-                      inputBackgroundColor: Colors.white,
-                      primaryColor: Color(0xFF3182bd),
-                      secondaryColor: Color(0xFFeff3ff),
-                      backgroundColor: Color(0xFFeff3ff),
-                      inputTextColor: Colors.black,
-                      inputTextCursorColor: Color(0xFF3182bd),
-                      sendButtonIcon: Icon(Icons.send, color: Color(0xFF3182bd)),
-                      messageBorderRadius: 18,
-                      messageInsetsVertical: 8,
-                      messageInsetsHorizontal: 14,
-                      sentMessageBodyTextStyle: TextStyle(color: Colors.white, fontSize: 16),
-                      receivedMessageBodyTextStyle: TextStyle(color: Colors.black87, fontSize: 16),
-                      inputTextStyle: TextStyle(fontSize: 16),
-                      inputBorderRadius: BorderRadius.all(Radius.circular(24)),
+  void _handleAttachmentPressed() {
+    setState(() => showEmojiPicker = false);
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.image),
+              title: const Text('Send Image'),
+              onTap: () {
+                Navigator.pop(context);
+                _handleImageAttachment();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.calendar_today),
+              title: const Text('Schedule Meeting'),
+              onTap: () {
+                Navigator.pop(context);
+                _openMeetingAttachment();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  Widget _buildMessageBubble(Map<String, dynamic> msg, bool isMe) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment:
+            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          if (!isMe && widget.currentUserAvatar != null)
+            CircleAvatar(
+              backgroundImage: NetworkImage(widget.currentUserAvatar!),
+              radius: 16,
+            ),
+          Flexible(
+            child: Container(
+              margin: EdgeInsets.only(
+                left: isMe ? 60 : 8,
+                right: isMe ? 8 : 60,
+              ),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isMe ? Colors.blue[100] : Colors.grey[200],
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(12),
+                  topRight: const Radius.circular(12),
+                  bottomLeft: Radius.circular(isMe ? 12 : 0),
+                  bottomRight: Radius.circular(isMe ? 0 : 12),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment:
+                    isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  if (!isMe)
+                    Text(
+                      msg['sender_name'] ?? 'Unknown',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  Text(
+                    msg['message'],
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatTimestamp(msg['timestamp']),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey[600],
                     ),
                   ),
+                ],
+              ),
+            ),
+          ),
+          if (isMe && widget.currentUserAvatar != null)
+            CircleAvatar(
+              backgroundImage: NetworkImage(widget.currentUserAvatar!),
+              radius: 16,
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _formatTimestamp(dynamic timestamp) {
+    if (timestamp == null) return 'Just now';
+    try {
+      final date = DateTime.parse(timestamp.toString());
+      return DateFormat('h:mm a').format(date);
+    } catch (e) {
+      return 'Just now';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Chat'),
+            if (_isTyping)
+              const Text(
+                'Typing...',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
                 ),
+              ),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : messages.isEmpty
+                    ? const Center(child: Text('No messages yet'))
+                    : ListView.builder(
+                        controller: _scrollController,
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          final msg = messages[index];
+                          final isMe = msg['sender_id'] == widget.currentUserId;
+                          return _buildMessageBubble(msg, isMe);
+                        },
+                      ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              children: [
                 if (showEmojiPicker)
                   SizedBox(
                     height: 250,
-                    child: EmojiPicker(
-                      onEmojiSelected: (category, emoji) {
-                        final newText = _textController.text + emoji.emoji;
-                        _textController.text = newText;
-                        _textController.selection = TextSelection.fromPosition(
-                            TextPosition(offset: newText.length));
-                      },
-                      config: const Config(
-                        columns: 7,
-                        emojiSizeMax: 28,
-                        bgColor: Color(0xFFF2F2F2),
-                        indicatorColor: Colors.blue,
-                        iconColor: Colors.grey,
-                        iconColorSelected: Colors.blue,
-                        backspaceColor: Colors.red,
-                        recentsLimit: 28,
-                      ),
+                    child: GridView.count(
+                      crossAxisCount: 7,
+                      children: ['😀', '😂', '😍', '👍', '❤️', '🎉', '🙏']
+                          .map((emoji) => IconButton(
+                                icon: Text(emoji),
+                                onPressed: () {
+                                  final newText =
+                                      _controller.text + emoji;
+                                  _controller.text = newText;
+                                  _controller.selection =
+                                      TextSelection.fromPosition(
+                                          TextPosition(offset: newText.length));
+                                },
+                              ))
+                          .toList(),
                     ),
                   ),
-                if (otherUserId != null)
-                  StreamBuilder<DocumentSnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('chats')
-                        .doc(widget.chatId)
-                        .collection('typingStatus')
-                        .doc(otherUserId)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData || !snapshot.data!.exists) {
-                        return const SizedBox.shrink();
-                      }
-                      final data = snapshot.data!.data() as Map<String, dynamic>?;
-                      final isTyping = data?['isTyping'] ?? false;
-                      return isTyping
-                          ? const Padding(
-                              padding: EdgeInsets.only(left: 24, bottom: 8),
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  "Typing...",
-                                  style: TextStyle(
-                                    color: Colors.grey,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              ),
-                            )
-                          : const SizedBox.shrink();
-                    },
-                  ),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.attach_file),
+                      onPressed: _handleAttachmentPressed,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.emoji_emotions),
+                      onPressed: () {
+                        setState(() => showEmojiPicker = !showEmojiPicker);
+                        FocusScope.of(context).unfocus();
+                      },
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: _controller,
+                        decoration: InputDecoration(
+                          hintText: 'Type a message...',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                        ),
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _isSending
+                        ? const CircularProgressIndicator()
+                        : IconButton(
+                            icon: const Icon(Icons.send, color: Colors.blue),
+                            onPressed: _sendMessage,
+                          ),
+                  ],
+                ),
               ],
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
+  }
+
+  // API Functions
+  Future<void> sendMessage(
+      String itemId, String senderId, String message) async {
+    final uri = Uri.parse("http://127.0.0.1:8000/chat/send");
+    final response = await http.post(
+      uri.replace(queryParameters: {"item_id": itemId}),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({
+        "sender_id": senderId,
+        "sender_name": widget.currentUserName,
+        "message": message,
+        "timestamp": DateTime.now().toIso8601String(),
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("Failed to send message: ${response.body}");
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getChatHistory(String itemId) async {
+    final uri = Uri.parse("http://127.0.0.1:8000/chat/$itemId");
+    final response = await http.get(uri);
+
+    if (response.statusCode != 200) {
+      throw Exception("Failed to load messages: ${response.body}");
+    }
+    
+    final List<dynamic> data = jsonDecode(response.body);
+    return List<Map<String, dynamic>>.from(data);
   }
 }
