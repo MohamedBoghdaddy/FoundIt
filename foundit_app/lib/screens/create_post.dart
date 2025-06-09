@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class CreatePostScreen extends StatefulWidget {
   const CreatePostScreen({super.key});
@@ -15,59 +18,150 @@ class CreatePostScreen extends StatefulWidget {
 class _CreatePostScreenState extends State<CreatePostScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
-  final _questionController = TextEditingController();
+  final String _backendUrl = kIsWeb
+    ? "http://localhost:8000"
+    : "http://10.0.2.2:8000"; // For Android emulator
 
   String? _location;
   String? _type;
   XFile? _selectedImage;
-  List<String> questions = [];
+  List<String> generatedQuestions = [];
+  Map<String, TextEditingController> answerControllers = {};
+  String? _itemId;
+  String? _imageUrlFromBackend;
+  bool _isGeneratingQuestions = false;
+  bool _isSavingAnswers = false;
 
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
     final image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      setState(() => _selectedImage = image);
-    }
-  }
-
-  void _addQuestion() {
-    if (_questionController.text.isNotEmpty) {
       setState(() {
-        questions.add(_questionController.text);
+        _selectedImage = image;
+        generatedQuestions = [];
+        answerControllers.clear();
+        _itemId = null;
+        _imageUrlFromBackend = null;
       });
-      _questionController.clear();
     }
   }
 
-  Future<void> _savePost() async {
+  Future<void> _generateQuestions() async {
+  if (_selectedImage == null) return;
+
+  setState(() => _isGeneratingQuestions = true);
+
+  try {
+    // Create multipart request
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_backendUrl/gemini/analyze'),
+    );
+
+    if (kIsWeb) {
+      // 🌐 Web-safe: Use fromBytes
+      final bytes = await _selectedImage!.readAsBytes();
+      request.files.add(http.MultipartFile.fromBytes(
+        'image',
+        bytes,
+        filename: _selectedImage!.name,
+      ));
+    } else {
+      // 📱 Mobile-safe: Use fromPath
+      request.files.add(await http.MultipartFile.fromPath(
+        'image',
+        _selectedImage!.path,
+      ));
+    }
+
+    // Send request
+    var response = await request.send();
+
+    if (response.statusCode == 200) {
+      final responseData = await response.stream.bytesToString();
+      final jsonData = jsonDecode(responseData);
+
+      setState(() {
+        _itemId = jsonData['item_id'];
+        generatedQuestions = List<String>.from(jsonData['questions']);
+        _imageUrlFromBackend = jsonData['image_url'];
+
+        // Initialize answer controllers
+        for (int i = 0; i < generatedQuestions.length; i++) {
+          answerControllers[i.toString()] = TextEditingController();
+        }
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to generate questions: ${response.reasonPhrase}')),
+      );
+    }
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error: ${e.toString()}')),
+    );
+  } finally {
+    setState(() => _isGeneratingQuestions = false);
+  }
+}
+
+  Future<void> _saveCorrectAnswers() async {
+    if (_itemId == null || answerControllers.isEmpty) return;
+
+    setState(() => _isSavingAnswers = true);
+
+    try {
+      // Prepare answers payload
+      final answers = {};
+      answerControllers.forEach((key, controller) {
+        answers[key] = controller.text;
+      });
+
+      // Send to backend
+      final response = await http.post(
+        Uri.parse('$_backendUrl/gemini/answer-key'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'item_id': _itemId,
+          'answers': answers,
+          'finder_id': FirebaseAuth.instance.currentUser?.uid,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        await _savePostToFirestore();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save answers: ${response.body}')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
+    } finally {
+      setState(() => _isSavingAnswers = false);
+    }
+  }
+
+  Future<void> _savePostToFirestore() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (!_formKey.currentState!.validate()) return;
-
-    final defaultImageUrl = _selectedImage != null
-        ? _selectedImage!.path
-        : 'https://picsum.photos/seed/defaultImage/600/300';
-
-    final questionnaireRef =
-        await FirebaseFirestore.instance.collection('questionnaires').add({
-      'questions': questions,
-      'correctAnswers': List.filled(questions.length, ''),
-      'foundDate': Timestamp.now(),
-    });
+    if (!_formKey.currentState!.validate() || _itemId == null) return;
 
     await FirebaseFirestore.instance.collection('posts').add({
       'userId': user?.uid,
       'title': _titleController.text.trim(),
       'location': _location,
       'type': _type,
-      'imageUrl': defaultImageUrl,
+      'imageUrl': _imageUrlFromBackend,
       'timestamp': Timestamp.now(),
-      'questionnaireId': questionnaireRef.id,
+      'item_id': _itemId, // Reference to backend item
     });
 
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Post Created")),
+        const SnackBar(content: Text("Post Created Successfully!")),
       );
     }
   }
@@ -82,7 +176,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   Widget _buildImagePreview() {
     if (_selectedImage == null) {
-      return const Center(child: Text("Tap to select image", style: TextStyle(color: Colors.white)));
+      return const Center(
+        child: Text("Tap to select image", style: TextStyle(color: Colors.white)),
+      );
     }
     return kIsWeb
         ? Image.network(_selectedImage!.path, fit: BoxFit.cover)
@@ -105,6 +201,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           key: _formKey,
           child: ListView(
             children: [
+              // Image picker section
               GestureDetector(
                 onTap: _pickImage,
                 child: Container(
@@ -120,50 +217,115 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   ),
                 ),
               ),
+              
+              // Generate questions button
+              if (_selectedImage != null && generatedQuestions.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16.0),
+                  child: ElevatedButton(
+                    onPressed: _isGeneratingQuestions ? null : _generateQuestions,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.deepPurple[300],
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: _isGeneratingQuestions
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                            "Generate Verification Questions",
+                            style: TextStyle(fontSize: 16, color: Colors.white),
+                          ),
+                  ),
+                ),
+              
               const SizedBox(height: 16),
               _buildStyledTextField(_titleController, "Title", true),
               const SizedBox(height: 16),
               _buildStyledDropdown(
-                  "Location",
-                  _location,
-                  ["S-Building", "B-Building", "E-Building"],
-                  (val) => setState(() => _location = val)),
+                "Location",
+                _location,
+                ["S-Building", "B-Building", "E-Building"],
+                (val) => setState(() => _location = val),
+              ),
               const SizedBox(height: 16),
               _buildStyledDropdown(
-                  "Type", _type, ["lost", "found"], (val) => setState(() => _type = val)),
-              const SizedBox(height: 16),
-              _buildStyledTextField(_questionController, "Enter Question", false),
-              TextButton.icon(
-                onPressed: _addQuestion,
-                icon: const Icon(Icons.add, color: Colors.white),
-                label: const Text("Add Question", style: TextStyle(color: Colors.white)),
+                "Type",
+                _type,
+                ["lost", "found"],
+                (val) => setState(() => _type = val),
               ),
-              const SizedBox(height: 10),
-              if (questions.isNotEmpty)
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: questions
-                      .map((q) => Chip(
-                            label: Text(q, style: const TextStyle(color: Colors.white)),
-                            backgroundColor: Colors.purple[400],
-                          ))
-                      .toList(),
+              
+              // Generated questions section
+              if (generatedQuestions.isNotEmpty)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 20),
+                    const Text(
+                      "Verification Questions:",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ...generatedQuestions.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final question = entry.value;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "${index + 1}. $question",
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            TextFormField(
+                              controller: answerControllers[index.toString()],
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                labelText: "Correct answer",
+                                labelStyle: const TextStyle(color: Colors.white70),
+                                filled: true,
+                                fillColor: Colors.white.withOpacity(0.1),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ],
                 ),
+              
               const SizedBox(height: 24),
+              // Submit button
               ElevatedButton(
-                onPressed: _savePost,
+                onPressed: (_isSavingAnswers || generatedQuestions.isEmpty) 
+                    ? null 
+                    : _saveCorrectAnswers,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: Colors.deepPurple,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                    borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                child: const Text(
-                  "Post",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
+                child: _isSavingAnswers
+                    ? const CircularProgressIndicator()
+                    : const Text(
+                        "Create Post",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold),
+                      ),
               ),
             ],
           ),

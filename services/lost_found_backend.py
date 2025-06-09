@@ -1,44 +1,47 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional
-import google.generativeai as genai
-import os
-import base64
-import json
-from difflib import SequenceMatcher
+from typing import Dict, Optional
+from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 from uuid import uuid4
-from fastapi.middleware.cors import CORSMiddleware
+from difflib import SequenceMatcher
+import google.generativeai as genai
+import cloudinary
+import cloudinary.uploader
 import firebase_admin
-from firebase_admin import credentials, firestore, storage
-import asyncio
-import aiohttp
+from firebase_admin import credentials, firestore
+import json
+import os
+import traceback
+import magic
+from dotenv import load_dotenv
 
-# Initialize Firebase
-FIREBASE_CONFIG = {
-    "apiKey": "AIzaSyA0rHx4NLSi2HpUHsRD5f9YQaI5IKQpMME",
-    "authDomain": "founditapp-f63e5.firebaseapp.com",
-    "projectId": "founditapp-f63e5",
-    "storageBucket": "founditapp-f63e5.appspot.com",
-    "messagingSenderId": "975298750134",
-    "appId": "1:975298750134:web:7c6754e0038633dd9b6817"
-}
+# === Load environment variables ===
+load_dotenv()
 
-# Initialize Firebase Admin SDK
-cred = credentials.Certificate(json.loads(os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")))
+# === Cloudinary Configuration ===
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+    secure=True
+)
+
+# === Firebase Initialization ===
+cred = credentials.Certificate(os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON"))
 firebase_admin.initialize_app(cred, {
-    'storageBucket': FIREBASE_CONFIG["storageBucket"]
+    'projectId': os.getenv("FIREBASE_PROJECT_ID")
 })
-
-# Get Firestore and Storage clients
 db = firestore.client()
-bucket = storage.bucket()
 
-# === FastAPI App Setup ===
+# === Gemini Configuration ===
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+model = genai.GenerativeModel("gemini-1.5-flash")
+
+# === FastAPI Setup ===
 app = FastAPI()
 router = APIRouter()
 
-# === CORS ===
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -46,15 +49,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# === Gemini Configuration ===
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-1.5-flash")
-
 # === Pydantic Models ===
 class AnswerInput(BaseModel):
     item_id: str
     answers: Dict[str, str]
-    finder_id: Optional[str] = Field(None, description="ID of user who found the item")
+    finder_id: Optional[str] = Field(None)
 
 class MatchRequest(BaseModel):
     item_id: str
@@ -65,77 +64,73 @@ class ChatMessage(BaseModel):
     sender_id: str
     message: str
 
-# === Helper Functions ===
+# === Utility Functions ===
 def similarity_ratio(a: str, b: str) -> float:
-    a = a.strip().lower()
-    b = b.strip().lower()
-    return SequenceMatcher(None, a, b).ratio()
+    return SequenceMatcher(None, a.strip().lower(), b.strip().lower()).ratio()
 
-async def upload_to_firebase(file: UploadFile) -> str:
-    """Upload file to Firebase Storage and return download URL"""
-    file_content = await file.read()
-    blob = bucket.blob(f"item_images/{uuid4()}_{file.filename}")
-    
-    # Upload file content
-    blob.upload_from_string(
-        file_content, 
-        content_type=file.content_type
-    )
-    
-    # Get download URL
-    blob.make_public()
-    return blob.public_url
+async def upload_to_cloudinary(file: UploadFile) -> tuple:
+    try:
+        content = await file.read()
+        mime_type = magic.from_buffer(content, mime=True)
+        result = cloudinary.uploader.upload(
+            content,
+            resource_type="image",
+            folder="foundit/item_images"
+        )
+        return result["secure_url"], content, mime_type
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Cloudinary upload failed: {str(e)}"
+        )
 
-async def store_chat_message(item_id: str, message: dict):
-    """Store chat message in Firestore"""
-    chat_ref = db.collection("chats").document(item_id)
-    chat_ref.set({
-        "participants": message.get("participants", {}),
-        "last_updated": datetime.utcnow()
-    }, merge=True)
-    
-    messages_ref = chat_ref.collection("messages")
-    messages_ref.add({
-        "sender_id": message["sender_id"],
-        "message": message["message"],
-        "timestamp": datetime.utcnow()
-    })
-
-# === Routes ===
+# === API Routes ===
 @router.post("/gemini/analyze")
 async def analyze_item_image(image: UploadFile = File(...)):
     try:
-        # Upload image to Firebase Storage
-        image_url = await upload_to_firebase(image)
-        
-        # Get image content for Gemini
-        content = await image.read()
-        
-        # Generate questions with Gemini
+        # Upload to Cloudinary and get content + MIME
+        image_url, content, mime_type = await upload_to_cloudinary(image)
+        # Generate questions using Gemini
         prompt = """
-You are an assistant that creates ownership-verification questions for lost and found items.
-Generate exactly 5 concise, specific, and answerable questions that would help verify a person's claim of ownership.
-Output ONLY a valid JSON array of strings. Do not include any other text.
-Example: ["What color is the main body?", "Is there any distinctive wear mark?", ...]
+You are an AI tasked with verifying the ownership of lost items based on an image.
+
+Generate **exactly 5** clear, concise, and **objective questions** that can:
+- Be answered from memory by the real owner
+- Be verified using the item's visible details
+- Avoid personal or unverifiable questions (e.g., "Where did you buy it?")
+
+Focus on features like:
+- Specific parts, labels, defects, customizations
+- Colors, textures, engravings, tag info, placement of logos
+- Details not easily guessed by someone who saw the image briefly
+
+Only return a **valid JSON array** of strings. Do NOT include explanations or markdown.
+
+Example output:
+["What is written on the label inside?", "What color is the zipper?", "Are there any scratches or marks on it?", "Describe the logo placement", "Is there a tag or sticker on it?"]
 """
+
         response = model.generate_content([
             prompt,
-            genai.types.Blob(mime_type=image.content_type, data=content)
+            {
+                "mime_type": mime_type,
+                "data": content
+            }
         ])
-        
-        # Clean Gemini response
+
+        # Parse Gemini Response
         response_text = response.text.strip()
         if response_text.startswith("```json"):
-            response_text = response_text[7:-3].strip()
-        
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
         questions = json.loads(response_text)
-        if not isinstance(questions, list) or len(questions) != 5:
-            raise ValueError("Gemini response is not a valid list of 5 questions")
 
-        # Create item in Firestore
+        if not isinstance(questions, list) or len(questions) != 5:
+            raise ValueError("Gemini returned invalid question list")
+
+        # Save to Firestore
         item_id = str(uuid4())
-        item_ref = db.collection("found_items").document(item_id)
-        item_ref.set({
+        db.collection("found_items").document(item_id).set({
             "id": item_id,
             "image_url": image_url,
             "questions": questions,
@@ -145,139 +140,135 @@ Example: ["What color is the main body?", "Is there any distinctive wear mark?",
             "claims": [],
             "finder_id": None
         })
-        
-        return {"item_id": item_id, "questions": questions}
+
+        return {"item_id": item_id, "questions": questions, "image_url": image_url}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Gemini processing failed: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Gemini processing failed: {str(e)}"
+        )
 
 @router.post("/gemini/answer-key")
 async def submit_answer_key(data: AnswerInput):
-    item_ref = db.collection("found_items").document(data.item_id)
-    item = item_ref.get()
-    
+    ref = db.collection("found_items").document(data.item_id)
+    item = ref.get()
     if not item.exists:
         raise HTTPException(status_code=404, detail="Item not found")
     
     update_data = {"correct_answers": data.answers}
     if data.finder_id:
         update_data["finder_id"] = data.finder_id
-    
-    item_ref.update(update_data)
-    return {"message": "Correct answers saved"}
+        
+    ref.update(update_data)
+    return {"message": "Answers saved successfully"}
 
 @router.post("/evaluate-match")
 async def evaluate_match(req: MatchRequest):
-    item_ref = db.collection("found_items").document(req.item_id)
-    item = item_ref.get()
-    
+    ref = db.collection("found_items").document(req.item_id)
+    item = ref.get()
     if not item.exists:
         raise HTTPException(status_code=404, detail="Item not found")
     
-    item_data = item.to_dict()
+    data = item.to_dict()
+    correct = data.get("correct_answers", {})
     
-    if not item_data.get("correct_answers"):
-        raise HTTPException(status_code=400, detail="Answer key not set for this item")
-    
-    correct = item_data["correct_answers"]
-    matched = 0
-    total = len(correct)
-
-    for q in correct:
-        ratio = similarity_ratio(correct[q], req.user_answers.get(q, ""))
-        if ratio > 0.85:
-            matched += 1
-
-    score = matched / total if total > 0 else 0
+    # Calculate match score
+    matched = sum(
+        1 for q in correct 
+        if similarity_ratio(correct[q], req.user_answers.get(q, "")) > 0.85
+    )
+    score = matched / len(correct) if correct else 0
     verified = score >= 0.85
 
-    # Create claim attempt
-    attempt_id = str(uuid4())
-    attempt_data = {
-        "attempt_id": attempt_id,
+    # Create attempt record
+    attempt = {
+        "attempt_id": str(uuid4()),
         "user_id": req.user_id,
         "score": round(score, 2),
         "verified": verified,
         "timestamp": datetime.utcnow()
     }
     
-    # Update item document
-    updates = {
-        "claims": firestore.ArrayUnion([attempt_data]),
-        "is_claimed": verified or item_data.get("is_claimed", False)
-    }
+    # Update item in Firestore
+    ref.update({
+        "claims": firestore.ArrayUnion([attempt]),
+        "is_claimed": verified
+    })
     
     # Create chat if verified
-    if verified and item_data.get("finder_id"):
-        chat_data = {
+    if verified and data.get("finder_id"):
+        db.collection("chats").document(req.item_id).set({
             "item_id": req.item_id,
-            "finder_id": item_data["finder_id"],
+            "finder_id": data["finder_id"],
             "claimer_id": req.user_id,
             "created_at": datetime.utcnow()
-        }
-        db.collection("chats").document(req.item_id).set(chat_data, merge=True)
-    
-    item_ref.update(updates)
+        })
     
     return {
         "match": verified,
         "score": round(score, 2),
         "show_image": verified,
-        "image_url": item_data["image_url"] if verified else None,
-        "attempt_id": attempt_id,
+        "image_url": data["image_url"] if verified else None,
         "chat_enabled": verified
     }
 
 @router.post("/chat/send")
 async def send_chat_message(item_id: str, message: ChatMessage):
     chat_ref = db.collection("chats").document(item_id)
-    chat = chat_ref.get()
-    
-    if not chat.exists:
+    if not chat_ref.get().exists:
         raise HTTPException(status_code=404, detail="Chat not found")
     
-    # Add message to subcollection
-    messages_ref = chat_ref.collection("messages")
-    messages_ref.add({
+    chat_ref.collection("messages").add({
         "sender_id": message.sender_id,
         "message": message.message,
         "timestamp": datetime.utcnow()
     })
     
-    # Update last message timestamp
+    # Update last activity timestamp
     chat_ref.update({"last_updated": datetime.utcnow()})
     
-    return {"status": "message sent"}
+    return {"status": "Message sent"}
 
 @router.get("/chat/{item_id}")
-async def get_chat_history(item_id: str, limit: int = 50):
-    messages_ref = db.collection("chats").document(item_id).collection("messages")
-    docs = messages_ref.order_by("timestamp", direction=firestore.Query.DESCENDING).limit(limit).stream()
+async def get_chat_history(item_id: str, limit: int = 100):
+    chat_ref = db.collection("chats").document(item_id)
+    if not chat_ref.get().exists:
+        raise HTTPException(status_code=404, detail="Chat not found")
     
     messages = []
+    docs = chat_ref.collection("messages").order_by("timestamp").limit(limit).stream()
+    
     for doc in docs:
         msg = doc.to_dict()
         msg["id"] = doc.id
         messages.append(msg)
     
-    # Return in chronological order
-    return sorted(messages, key=lambda x: x["timestamp"])
+    return messages
 
 @router.get("/items/{item_id}")
 async def get_item(item_id: str):
-    item_ref = db.collection("found_items").document(item_id)
-    item = item_ref.get()
-    
-    if not item.exists:
+    doc = db.collection("found_items").document(item_id).get()
+    if not doc.exists:
         raise HTTPException(status_code=404, detail="Item not found")
     
-    item_data = item.to_dict()
-    
-    # Don't expose answers
-    if "correct_answers" in item_data:
-        del item_data["correct_answers"]
-    
-    return item_data
+    data = doc.to_dict()
+    # Remove sensitive data
+    data.pop("correct_answers", None)
+    return data
 
-# === Register Router ===
+# Log middleware
+@app.middleware("http")
+async def log_requests(request, call_next):
+    print(f"Incoming request: {request.method} {request.url}")
+    response = await call_next(request)
+    print(f"Response: {response.status_code}")
+    return response
+
+# === Mount Router ===
 app.include_router(router)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
