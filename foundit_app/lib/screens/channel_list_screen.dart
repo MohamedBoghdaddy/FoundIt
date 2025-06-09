@@ -4,8 +4,8 @@ import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import 'package:collection/collection.dart';
 
-import 'chat_screen.dart';
-import 'user_selection_screen.dart'; // Unified import
+import 'package:foundit_app/screens/chat_screen.dart';
+import 'UserSearchScreen.dart'; // Corrected import
 
 class ChannelListScreen extends StatefulWidget {
   const ChannelListScreen({super.key});
@@ -29,7 +29,7 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
   void _showUserSelection() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const UserSelectionScreen()),
+      MaterialPageRoute(builder: (_) => const UserSearchScreen()),
     );
   }
 
@@ -101,7 +101,6 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
                   final userData =
                       userSnapshot.data!.data() as Map<String, dynamic>;
 
-                  // Display name with fallback logic
                   String displayName = '';
                   final firstName = userData['firstName'] ?? '';
                   final lastName = userData['lastName'] ?? '';
@@ -180,8 +179,10 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => ChatScreen(
-                              chatId: chatDoc.id,
-                              currentUser: currentUser,
+                              itemId: chatDoc.id,
+                              currentUserId: currentUser.id,
+                              currentUserName: displayName,
+                              currentUserAvatar: imageUrl,
                             ),
                           ),
                         );

@@ -87,7 +87,13 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
                         ),
                         title: Text(fullName.isNotEmpty ? fullName : 'Unknown'),
                         subtitle: Text(email),
-                        onTap: () => _startChatWithUser(context, otherUserId, currentUser.uid),
+                        onTap: () => _startChatWithUser(
+                          context,
+                          otherUserId,
+                          currentUser.uid,
+                          fullName,
+                          imageUrl,
+                        ),
                       ),
                     );
                   },
@@ -100,9 +106,14 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
     );
   }
 
-  void _startChatWithUser(BuildContext context, String otherUserId, String currentUserId) async {
-    final users = [currentUserId, otherUserId]..sort(); // Ensure consistent order
-
+  void _startChatWithUser(
+    BuildContext context,
+    String otherUserId,
+    String currentUserId,
+    String currentUserName,
+    String? currentUserAvatar,
+  ) async {
+    final users = [currentUserId, otherUserId]..sort();
     final chatRef = FirebaseFirestore.instance.collection('chats');
 
     final existingChats = await chatRef
@@ -129,8 +140,10 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => ChatScreen(
-          chatId: chatId,
-          currentUser: types.User(id: currentUserId),
+          itemId: chatId,
+          currentUserId: currentUserId,
+          currentUserName: currentUserName,
+          currentUserAvatar: currentUserAvatar,
         ),
       ),
     );
