@@ -58,3 +58,8 @@ Thumbs.db
 # -----------------
 *.swp
 *.swo
+
+.env
+serviceAccountKey.json
+services/serviceAccountKey.json
+services/.env
