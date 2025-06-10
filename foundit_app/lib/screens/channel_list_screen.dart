@@ -181,8 +181,10 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
                             builder: (context) => ChatScreen(
                               itemId: chatDoc.id,
                               currentUserId: currentUser.id,
-                              currentUserName: displayName,
-                              currentUserAvatar: imageUrl,
+                              currentUserName:
+                                  firebaseUser!.displayName ?? displayName,
+                              currentUserAvatar: firebaseUser!.photoURL,
+                              receiverId: otherUserId, // ✅ Pass receiverId here
                             ),
                           ),
                         );

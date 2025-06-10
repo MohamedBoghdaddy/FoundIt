@@ -112,10 +112,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
     try {
       // Prepare answers payload
-      final answers = {};
-      answerControllers.forEach((key, controller) {
-        answers[key] = controller.text;
-      });
+      final answers = {
+        for (int i = 0; i < generatedQuestions.length; i++)
+          generatedQuestions[i]: answerControllers[i.toString()]?.text ?? ''
+      };
 
       // Send to backend
       final response = await http.post(

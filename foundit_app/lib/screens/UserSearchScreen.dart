@@ -144,6 +144,7 @@ class _UserSearchScreenState extends State<UserSearchScreen> {
           currentUserId: currentUserId,
           currentUserName: currentUserName,
           currentUserAvatar: currentUserAvatar,
+           receiverId: otherUserId,
         ),
       ),
     );

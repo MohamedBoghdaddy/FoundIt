@@ -7,8 +7,8 @@ import 'features/auth/bloc/auth_cubit.dart';
 import 'services/auth_service.dart';
 
 import 'screens/channel_list_screen.dart' as channel_list;
-import 'screens/home.dart'; // contains HomeScreen
-import 'screens/homepage.dart'; // contains HomePage
+import 'screens/home.dart';
+import 'screens/homepage.dart';
 import 'screens/create_post.dart';
 import 'screens/login.dart';
 import 'screens/register_screen.dart';
@@ -89,11 +89,18 @@ class MyApp extends StatelessWidget {
         '/createPost': (context) => const CreatePostScreen(),
         '/profile': (context) => const ProfilePage(),
         '/editPost': (context) => const Placeholder(),
-        '/questionnaire': (context) => const QuestionnaireScreen(
-              questionnaireId: '',
-              postId: '',
-            ),
         '/channels': (context) => const channel_list.ChannelListScreen(),
+      },
+      onGenerateRoute: (settings) {
+        if (settings.name == '/questionnaire') {
+          final args = settings.arguments as Map<String, dynamic>;
+          return MaterialPageRoute(
+            builder: (_) => QuestionnaireScreen(
+              questionnaireId: args['questionnaireId'],
+            ),
+          );
+        }
+        return null;
       },
     );
   }
@@ -112,6 +119,7 @@ class _SplashScreenRedirectState extends State<SplashScreenRedirect> {
     super.initState();
     Future.delayed(const Duration(seconds: 2), () {
       final user = firebase_auth.FirebaseAuth.instance.currentUser;
+      if (!mounted) return;
       Navigator.pushReplacementNamed(
           context, user == null ? '/welcome' : '/channels');
     });

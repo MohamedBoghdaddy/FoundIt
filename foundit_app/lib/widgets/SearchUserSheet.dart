@@ -37,7 +37,8 @@ class _SearchUserSheetState extends State<SearchUserSheet> {
           const SizedBox(height: 10),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('users').snapshots(),
+              stream:
+                  FirebaseFirestore.instance.collection('users').snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
@@ -46,7 +47,10 @@ class _SearchUserSheetState extends State<SearchUserSheet> {
                 final users = snapshot.data!.docs
                     .where((doc) =>
                         doc.id != currentUser?.uid &&
-                        (doc['firstName']?.toLowerCase().contains(searchQuery) ?? false))
+                        (doc['firstName']
+                                ?.toLowerCase()
+                                .contains(searchQuery) ??
+                            false))
                     .toList();
 
                 if (users.isEmpty) {
@@ -60,7 +64,8 @@ class _SearchUserSheetState extends State<SearchUserSheet> {
                     final userData = userDoc.data() as Map<String, dynamic>;
 
                     final fullName =
-                        "${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}".trim();
+                        "${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}"
+                            .trim();
                     final imageUrl = userData['imageUrl'];
                     final email = userData['email'] ?? '';
 
@@ -69,8 +74,11 @@ class _SearchUserSheetState extends State<SearchUserSheet> {
                       margin: const EdgeInsets.symmetric(vertical: 6),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
-                          child: imageUrl == null ? const Icon(Icons.person) : null,
+                          backgroundImage:
+                              imageUrl != null ? NetworkImage(imageUrl) : null,
+                          child: imageUrl == null
+                              ? const Icon(Icons.person)
+                              : null,
                         ),
                         title: Text(fullName.isNotEmpty ? fullName : 'No Name'),
                         subtitle: Text(email),
@@ -78,14 +86,18 @@ class _SearchUserSheetState extends State<SearchUserSheet> {
                           if (currentUser == null) return;
 
                           final selectedUserId = userDoc.id;
-                          final chatRef = FirebaseFirestore.instance.collection('chats');
+                          final chatRef =
+                              FirebaseFirestore.instance.collection('chats');
                           final possibleChats = await chatRef
                               .where('userIds', arrayContains: currentUser.uid)
                               .get();
 
-                          final existingChat = possibleChats.docs.firstWhereOrNull((chatDoc) {
-                            final userIds = List<String>.from(chatDoc['userIds']);
-                            return userIds.contains(selectedUserId) && userIds.length == 2;
+                          final existingChat =
+                              possibleChats.docs.firstWhereOrNull((chatDoc) {
+                            final userIds =
+                                List<String>.from(chatDoc['userIds']);
+                            return userIds.contains(selectedUserId) &&
+                                userIds.length == 2;
                           });
 
                           String chatId;
@@ -102,6 +114,7 @@ class _SearchUserSheetState extends State<SearchUserSheet> {
                           }
 
                           if (!mounted) return;
+
                           Navigator.pop(context);
                           Navigator.pushReplacement(
                             context,
@@ -109,8 +122,11 @@ class _SearchUserSheetState extends State<SearchUserSheet> {
                               builder: (_) => ChatScreen(
                                 itemId: chatId,
                                 currentUserId: currentUser.uid,
-                                currentUserName: fullName,
-                                currentUserAvatar: imageUrl,
+                                currentUserName:
+                                    currentUser.displayName ?? fullName,
+                                currentUserAvatar:
+                                    currentUser.photoURL ?? imageUrl,
+                                receiverId: selectedUserId,
                               ),
                             ),
                           );

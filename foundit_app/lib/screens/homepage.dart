@@ -26,7 +26,9 @@ class _HomePageState extends State<HomePage>
   void initState() {
     super.initState();
     _animationController = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 300));
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
     _scrollController.addListener(_scrollListener);
   }
 
@@ -90,14 +92,14 @@ class _HomePageState extends State<HomePage>
         .collection('reactions')
         .get();
 
-    final score = reactions.docs.fold(0, (sum, doc) {
-      return sum + (doc['reaction'] == 'upvote' ? 1 : -1);
+    final total = reactions.docs.fold<int>(0, (acc, doc) {
+      return acc + (doc['reaction'] == 'upvote' ? 1 : -1);
     });
 
     await FirebaseFirestore.instance
         .collection('posts')
         .doc(postId)
-        .update({'score': score});
+        .update({'score': total});
   }
 
   Widget _buildVoteButton(String postId, String type, String? userReaction,
@@ -216,8 +218,7 @@ class _HomePageState extends State<HomePage>
                             context,
                             MaterialPageRoute(
                               builder: (_) => QuestionnaireScreen(
-                                questionnaireId: postId,
-                                postId: postId,
+                                questionnaireId: data['item_id'],
                               ),
                             ),
                           );
@@ -237,8 +238,10 @@ class _HomePageState extends State<HomePage>
     return StreamBuilder<QuerySnapshot>(
       stream: getFilteredPosts(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
+
         final posts = snapshot.data!.docs;
 
         return ListView.builder(

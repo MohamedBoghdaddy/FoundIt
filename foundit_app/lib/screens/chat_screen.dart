@@ -11,12 +11,14 @@ class ChatScreen extends StatefulWidget {
   final String currentUserId;
   final String currentUserName;
   final String? currentUserAvatar;
+  final String receiverId;
 
   const ChatScreen({
     super.key,
     required this.itemId,
     required this.currentUserId,
     required this.currentUserName,
+    required this.receiverId,
     this.currentUserAvatar,
   });
 
