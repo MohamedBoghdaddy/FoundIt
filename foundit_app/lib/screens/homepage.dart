@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'edit_post_screen.dart';
 import 'questionnaire_screen.dart';
+import 'main_scaffold.dart'; // Adjust this path if needed
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -11,8 +12,7 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage>
-    with SingleTickerProviderStateMixin {
+class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
   final int _limitIncrement = 5;
   int _limit = 5;
@@ -33,8 +33,7 @@ class _HomePageState extends State<HomePage>
   }
 
   void _scrollListener() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent) {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent) {
       setState(() => _limit += _limitIncrement);
     }
   }
@@ -106,8 +105,7 @@ class _HomePageState extends State<HomePage>
         .update({'score': total});
   }
 
-  Widget _buildVoteButton(String postId, String type, String? userReaction,
-      IconData icon, Color color) {
+  Widget _buildVoteButton(String postId, String type, String? userReaction, IconData icon, Color color) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('posts')
@@ -120,13 +118,10 @@ class _HomePageState extends State<HomePage>
         final isActive = userReaction == type;
 
         return ScaleTransition(
-          scale: CurvedAnimation(
-              parent: _animationController, curve: Curves.easeOutBack),
+          scale: CurvedAnimation(parent: _animationController, curve: Curves.easeOutBack),
           child: TextButton.icon(
             onPressed: () => _handleVote(postId, type),
-            style: TextButton.styleFrom(
-              foregroundColor: isActive ? color : Colors.grey,
-            ),
+            style: TextButton.styleFrom(foregroundColor: isActive ? color : Colors.grey),
             icon: Icon(icon),
             label: Text('$count'),
           ),
@@ -135,8 +130,7 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  Widget _buildPostCard(
-      Map<String, dynamic> data, String postId, String? userReaction) {
+  Widget _buildPostCard(Map<String, dynamic> data, String postId, String? userReaction) {
     final title = data['title'] ?? '';
     final type = data['type'] ?? '';
     final location = data['location'] ?? '';
@@ -154,10 +148,8 @@ class _HomePageState extends State<HomePage>
         children: [
           if (imageUrl.isNotEmpty)
             ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(16)),
-              child: Image.network(imageUrl,
-                  height: 180, width: double.infinity, fit: BoxFit.cover),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: Image.network(imageUrl, height: 180, width: double.infinity, fit: BoxFit.cover),
             ),
           Padding(
             padding: const EdgeInsets.all(12),
@@ -167,10 +159,8 @@ class _HomePageState extends State<HomePage>
                 Row(
                   children: [
                     Chip(
-                      label: Text(type.toUpperCase(),
-                          style: const TextStyle(color: Colors.white)),
-                      backgroundColor:
-                          type == 'lost' ? Colors.red : Colors.green,
+                      label: Text(type.toUpperCase(), style: const TextStyle(color: Colors.white)),
+                      backgroundColor: type == 'lost' ? Colors.red : Colors.green,
                     ),
                     const Spacer(),
                     if (ownerId == currentUser?.uid) ...[
@@ -178,41 +168,32 @@ class _HomePageState extends State<HomePage>
                         icon: const Icon(Icons.edit),
                         onPressed: () {
                           Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => EditPostScreen(
-                                    postId: postId, postData: data),
-                              ));
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => EditPostScreen(postId: postId, postData: data),
+                            ),
+                          );
                         },
                       ),
                       IconButton(
                         icon: const Icon(Icons.delete),
                         onPressed: () async {
-                          await FirebaseFirestore.instance
-                              .collection('posts')
-                              .doc(postId)
-                              .delete();
+                          await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
                         },
                       ),
                     ]
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 Text(location),
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    Text(_formatTimeAgo(timestamp),
-                        style:
-                            const TextStyle(color: Colors.grey, fontSize: 12)),
+                    Text(_formatTimeAgo(timestamp), style: const TextStyle(color: Colors.grey, fontSize: 12)),
                     const Spacer(),
-                    _buildVoteButton(postId, 'upvote', userReaction,
-                        Icons.thumb_up, Colors.blue),
-                    _buildVoteButton(postId, 'downvote', userReaction,
-                        Icons.thumb_down, Colors.red),
+                    _buildVoteButton(postId, 'upvote', userReaction, Icons.thumb_up, Colors.blue),
+                    _buildVoteButton(postId, 'downvote', userReaction, Icons.thumb_down, Colors.red),
                     if (showQuestionnaire)
                       TextButton.icon(
                         icon: const Icon(Icons.assignment_outlined),
@@ -308,31 +289,22 @@ class _HomePageState extends State<HomePage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("FoundIt Feed"),
-        automaticallyImplyLeading: false,
-        actions: [_buildSortMenu(), _buildFilterMenu()],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 0,
-        onTap: (index) {
-          if (index == 1) Navigator.pushNamed(context, '/profile');
-          if (index == 2) Navigator.pushNamed(context, '/channels');
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
+    return MainScaffold(
+      selectedIndex: 0,
+      body: Stack(
+        children: [
+          _buildPostList(),
+          Positioned(
+            bottom: 80,
+            right: 16,
+            child: FloatingActionButton(
+              onPressed: () => Navigator.pushNamed(context, '/createPost'),
+              backgroundColor: Colors.blue,
+              child: const Icon(Icons.add),
+            ),
+          ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.pushNamed(context, '/createPost'),
-        backgroundColor: Colors.blue,
-        child: const Icon(Icons.add),
-      ),
-      body: _buildPostList(),
     );
   }
 }

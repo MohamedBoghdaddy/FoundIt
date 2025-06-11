@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart'; // Adjust path if needed
 
 class MainScaffold extends StatelessWidget {
   final int selectedIndex;
@@ -10,6 +11,11 @@ class MainScaffold extends StatelessWidget {
     required this.body,
   });
 
+  void _handleLogout(BuildContext context) async {
+    await AuthService().logoutUser();
+    Navigator.pushReplacementNamed(context, '/login');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -19,17 +25,41 @@ class MainScaffold extends StatelessWidget {
       ),
       body: body,
       bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
         currentIndex: selectedIndex,
         onTap: (index) {
-          if (index == 0) {
-            Navigator.pushReplacementNamed(context, '/home');
-          } else if (index == 1) Navigator.pushReplacementNamed(context, '/profile');
-          else if (index == 2) Navigator.pushReplacementNamed(context, '/channels');
+          switch (index) {
+            case 0:
+              Navigator.pushReplacementNamed(context, '/home');
+              break;
+            case 1:
+              Navigator.pushReplacementNamed(context, '/profile');
+              break;
+            case 2:
+              Navigator.pushReplacementNamed(context, '/channels');
+              break;
+            case 3:
+              _handleLogout(context);
+              break;
+          }
         },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'channels'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline),
+            label: 'Chat',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.logout),
+            label: 'Logout',
+          ),
         ],
       ),
     );
