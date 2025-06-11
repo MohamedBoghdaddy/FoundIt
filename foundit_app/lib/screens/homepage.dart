@@ -42,13 +42,17 @@ class _HomePageState extends State<HomePage>
   Stream<QuerySnapshot> getFilteredPosts() {
     Query baseQuery = FirebaseFirestore.instance.collection('posts');
 
-    if (_filter != 'all') {
+    if (_filter == 'lost' || _filter == 'found') {
       baseQuery = baseQuery.where('type', isEqualTo: _filter);
     }
 
-    baseQuery = _sortBy == 'upvotes'
-        ? baseQuery.orderBy('score', descending: true)
-        : baseQuery.orderBy('timestamp', descending: true);
+    if (_sortBy == 'upvotes') {
+      baseQuery = baseQuery.orderBy('score', descending: true);
+    } else if (_sortBy == 'oldest') {
+      baseQuery = baseQuery.orderBy('timestamp', descending: false);
+    } else {
+      baseQuery = baseQuery.orderBy('timestamp', descending: true);
+    }
 
     return baseQuery.limit(_limit).snapshots();
   }
@@ -276,6 +280,7 @@ class _HomePageState extends State<HomePage>
       onSelected: (val) => setState(() => _sortBy = val),
       itemBuilder: (ctx) => const [
         PopupMenuItem(value: 'newest', child: Text('Newest First')),
+        PopupMenuItem(value: 'oldest', child: Text('Oldest First')),
         PopupMenuItem(value: 'upvotes', child: Text('Most Popular')),
       ],
     );
