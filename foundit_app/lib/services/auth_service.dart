@@ -1,14 +1,18 @@
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+
+  final String _cloudinaryUploadUrl =
+      "https://api.cloudinary.com/v1_1/djl6rkmex/image/upload";
+  final String _uploadPreset = "foundit_unsigned";
 
   /// 🔐 Send OTP by storing in Firestore
   Future<void> sendFirebaseOtp(String email) async {
@@ -33,21 +37,45 @@ class AuthService {
 
   /// ✅ Upload profile image (Mobile)
   Future<String> uploadProfileImage(File imageFile, String userId) async {
-    final storageRef = _storage.ref().child('profile_images/$userId.jpg');
-    final uploadTask = storageRef.putFile(imageFile);
-    final snapshot = await uploadTask.whenComplete(() {});
-    return await snapshot.ref.getDownloadURL();
+    try {
+      final request = http.MultipartRequest(
+          'POST', Uri.parse(_cloudinaryUploadUrl))
+        ..fields['upload_preset'] = _uploadPreset
+        ..fields['public_id'] = "profile_images/$userId"
+        ..files.add(await http.MultipartFile.fromPath('file', imageFile.path));
+
+      final response = await request.send();
+      final res = await http.Response.fromStream(response);
+      final data = jsonDecode(res.body);
+
+      if (response.statusCode != 200) throw data['error']['message'];
+      return data['secure_url'];
+    } catch (e) {
+      print('Cloudinary file upload error: $e');
+      throw Exception('Image upload failed: $e');
+    }
   }
 
   /// ✅ Upload profile image (Web)
   Future<String> uploadProfileBytes(Uint8List bytes, String userId) async {
-    final storageRef = _storage.ref().child('profile_images/$userId.jpg');
-    final uploadTask = storageRef.putData(
-      bytes,
-      SettableMetadata(contentType: 'image/jpeg'),
-    );
-    final snapshot = await uploadTask.whenComplete(() {});
-    return await snapshot.ref.getDownloadURL();
+    try {
+      final request =
+          http.MultipartRequest('POST', Uri.parse(_cloudinaryUploadUrl))
+            ..fields['upload_preset'] = _uploadPreset
+            ..fields['public_id'] = "profile_images/$userId"
+            ..files.add(http.MultipartFile.fromBytes('file', bytes,
+                filename: '$userId.jpg'));
+
+      final response = await request.send();
+      final res = await http.Response.fromStream(response);
+      final data = jsonDecode(res.body);
+
+      if (response.statusCode != 200) throw data['error']['message'];
+      return data['secure_url'];
+    } catch (e) {
+      print('Cloudinary byte upload error: $e');
+      throw Exception('Image upload failed: $e');
+    }
   }
 
   /// ✅ Register user and store profile in Firestore
@@ -69,8 +97,8 @@ class AuthService {
       'createdAt': Timestamp.now(),
       'firstName': firstName,
       'lastName': lastName,
-      'imageUrl': imageUrl ??
-          'https://cdn-icons-png.flaticon.com/512/149/149071.png',
+      'imageUrl':
+          imageUrl ?? 'https://cdn-icons-png.flaticon.com/512/149/149071.png',
     });
   }
 
