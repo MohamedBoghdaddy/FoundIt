@@ -19,8 +19,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final String _backendUrl = kIsWeb
-    ? "http://localhost:8000"
-    : "http://10.0.2.2:8000"; // For Android emulator
+      ? "http://localhost:8000"
+      : "http://10.0.2.2:8000"; // For Android emulator
 
   String? _location;
   String? _type;
@@ -47,63 +47,59 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
   Future<void> _generateQuestions() async {
-  if (_selectedImage == null) return;
+    if (_selectedImage == null) return;
 
-  setState(() => _isGeneratingQuestions = true);
+    setState(() => _isGeneratingQuestions = true);
 
-  try {
-    // Create multipart request
-    var request = http.MultipartRequest(
-      'POST',
-      Uri.parse('$_backendUrl/gemini/analyze'),
-    );
-
-    if (kIsWeb) {
-      // 🌐 Web-safe: Use fromBytes
-      final bytes = await _selectedImage!.readAsBytes();
-      request.files.add(http.MultipartFile.fromBytes(
-        'image',
-        bytes,
-        filename: _selectedImage!.name,
-      ));
-    } else {
-      // 📱 Mobile-safe: Use fromPath
-      request.files.add(await http.MultipartFile.fromPath(
-        'image',
-        _selectedImage!.path,
-      ));
-    }
-
-    // Send request
-    var response = await request.send();
-
-    if (response.statusCode == 200) {
-      final responseData = await response.stream.bytesToString();
-      final jsonData = jsonDecode(responseData);
-
-      setState(() {
-        _itemId = jsonData['item_id'];
-        generatedQuestions = List<String>.from(jsonData['questions']);
-        _imageUrlFromBackend = jsonData['image_url'];
-
-        // Initialize answer controllers
-        for (int i = 0; i < generatedQuestions.length; i++) {
-          answerControllers[i.toString()] = TextEditingController();
-        }
-      });
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to generate questions: ${response.reasonPhrase}')),
+    try {
+      // Create multipart request
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_backendUrl/gemini/analyze'),
       );
+
+      if (kIsWeb) {
+        // Web-safe: Use fromBytes
+        final bytes = await _selectedImage!.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes(
+          'image',
+          bytes,
+          filename: _selectedImage!.name,
+        ));
+      } else {
+        // Mobile-safe: Use fromPath
+        request.files.add(await http.MultipartFile.fromPath(
+          'image',
+          _selectedImage!.path,
+        ));
+      }
+
+      // Send request
+      var response = await request.send();
+
+      if (response.statusCode == 200) {
+        final responseData = await response.stream.bytesToString();
+        final jsonData = jsonDecode(responseData);
+
+        setState(() {
+          _itemId = jsonData['item_id'];
+          generatedQuestions = List<String>.from(jsonData['questions']);
+          _imageUrlFromBackend = jsonData['image_url'];
+
+          // Initialize answer controllers
+          for (int i = 0; i < generatedQuestions.length; i++) {
+            answerControllers[i.toString()] = TextEditingController();
+          }
+        });
+      } else {
+        _showError('Failed to generate questions: ${response.reasonPhrase}');
+      }
+    } catch (e) {
+      _showError('Error: ${e.toString()}');
+    } finally {
+      setState(() => _isGeneratingQuestions = false);
     }
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error: ${e.toString()}')),
-    );
-  } finally {
-    setState(() => _isGeneratingQuestions = false);
   }
-}
 
   Future<void> _saveCorrectAnswers() async {
     if (_itemId == null || answerControllers.isEmpty) return;
@@ -131,14 +127,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       if (response.statusCode == 200) {
         await _savePostToFirestore();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save answers: ${response.body}')),
-        );
+        _showError('Failed to save answers: ${response.body}');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
+      _showError('Error: ${e.toString()}');
     } finally {
       setState(() => _isSavingAnswers = false);
     }
@@ -161,28 +153,59 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Post Created Successfully!")),
+        const SnackBar(
+          content: Text("Post Created Successfully!"),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
 
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   BoxDecoration _gradientBackground() => const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF4A148C), Color(0xFF6A1B9A)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF0C4DA1),
+            Color(0xFF1C5DB1),
+            Color(0xFF2979D1),
+            Color(0xFF4090E3),
+          ],
         ),
       );
 
   Widget _buildImagePreview() {
     if (_selectedImage == null) {
-      return const Center(
-        child: Text("Tap to select image", style: TextStyle(color: Colors.white)),
+      return Center(
+        child: Text(
+          "Tap to select image",
+          style: TextStyle(color: Colors.white.withOpacity(0.8)),
+        ),
       );
     }
-    return kIsWeb
-        ? Image.network(_selectedImage!.path, fit: BoxFit.cover)
-        : Image.file(File(_selectedImage!.path), fit: BoxFit.cover);
+
+    final imageWidget = kIsWeb
+        ? Image.network(_selectedImage!.path, fit: BoxFit.contain)
+        : Image.file(File(_selectedImage!.path), fit: BoxFit.contain);
+
+    return InteractiveViewer(
+      panEnabled: true,
+      scaleEnabled: true,
+      minScale: 0.5,
+      maxScale: 3.0,
+      child: imageWidget,
+    );
   }
 
   @override
@@ -190,9 +213,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text("Create Post"),
+        title: const Text("Create Post", style: TextStyle(color: Colors.white)),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Container(
         decoration: _gradientBackground(),
@@ -208,8 +232,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   height: 200,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(15),
-                    color: Colors.white.withOpacity(0.2),
-                    border: Border.all(color: Colors.white70),
+                    color: Colors.white.withOpacity(0.1),
+                    border: Border.all(color: Colors.white.withOpacity(0.3)),
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(15),
@@ -217,26 +241,31 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   ),
                 ),
               ),
-              
+
               // Generate questions button
               if (_selectedImage != null && generatedQuestions.isEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 16.0),
                   child: ElevatedButton(
-                    onPressed: _isGeneratingQuestions ? null : _generateQuestions,
+                    onPressed:
+                        _isGeneratingQuestions ? null : _generateQuestions,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple[300],
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      backgroundColor: const Color(0xFF0C4DA1),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
                     ),
                     child: _isGeneratingQuestions
                         ? const CircularProgressIndicator(color: Colors.white)
                         : const Text(
                             "Generate Verification Questions",
-                            style: TextStyle(fontSize: 16, color: Colors.white),
+                            style: TextStyle(fontSize: 16),
                           ),
                   ),
                 ),
-              
+
               const SizedBox(height: 16),
               _buildStyledTextField(_titleController, "Title", true),
               const SizedBox(height: 16),
@@ -253,7 +282,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 ["lost", "found"],
                 (val) => setState(() => _type = val),
               ),
-              
+
               // Generated questions section
               if (generatedQuestions.isNotEmpty)
                 Column(
@@ -290,11 +319,23 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                               style: const TextStyle(color: Colors.white),
                               decoration: InputDecoration(
                                 labelText: "Correct answer",
-                                labelStyle: const TextStyle(color: Colors.white70),
+                                labelStyle: TextStyle(
+                                    color: Colors.white.withOpacity(0.7)),
                                 filled: true,
                                 fillColor: Colors.white.withOpacity(0.1),
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(15),
+                                  borderSide: BorderSide.none,
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(15),
+                                  borderSide: BorderSide(
+                                      color: Colors.white.withOpacity(0.2)),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(15),
+                                  borderSide:
+                                      const BorderSide(color: Colors.white),
                                 ),
                               ),
                             ),
@@ -304,27 +345,26 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                     }).toList(),
                   ],
                 ),
-              
+
               const SizedBox(height: 24),
               // Submit button
               ElevatedButton(
-                onPressed: (_isSavingAnswers || generatedQuestions.isEmpty) 
-                    ? null 
+                onPressed: (_isSavingAnswers || generatedQuestions.isEmpty)
+                    ? null
                     : _saveCorrectAnswers,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
-                  foregroundColor: Colors.deepPurple,
+                  foregroundColor: const Color(0xFF0C4DA1),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(15)),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
                 child: _isSavingAnswers
-                    ? const CircularProgressIndicator()
+                    ? const CircularProgressIndicator(color: Color(0xFF0C4DA1))
                     : const Text(
                         "Create Post",
                         style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold),
+                            fontSize: 18, fontWeight: FontWeight.bold),
                       ),
               ),
             ],
@@ -341,10 +381,34 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
+        labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
         filled: true,
         fillColor: Colors.white.withOpacity(0.1),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.white),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.yellow, width: 1.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.yellow, width: 1.5),
+        ),
+        errorStyle: const TextStyle(
+          color: Colors.yellow,
+          fontWeight: FontWeight.bold,
+          fontSize: 13,
+        ),
       ),
       validator: required
           ? (val) => val == null || val.isEmpty ? "Required" : null
@@ -352,18 +416,42 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     );
   }
 
-  Widget _buildStyledDropdown(
-      String label, String? value, List<String> items, Function(String?) onChanged) {
+  Widget _buildStyledDropdown(String label, String? value, List<String> items,
+      Function(String?) onChanged) {
     return DropdownButtonFormField<String>(
       value: value,
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
+        labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
         filled: true,
         fillColor: Colors.white.withOpacity(0.1),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.white),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.yellow, width: 1.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.yellow, width: 1.5),
+        ),
+        errorStyle: const TextStyle(
+          color: Colors.yellow,
+          fontWeight: FontWeight.bold,
+          fontSize: 13,
+        ),
       ),
-      dropdownColor: Colors.purple[800],
+      dropdownColor: const Color(0xFF1C5DB1),
       style: const TextStyle(color: Colors.white),
       iconEnabledColor: Colors.white,
       items: items
