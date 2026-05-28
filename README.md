@@ -1,127 +1,170 @@
-# 📱 FoundIt @ MIU – Lost & Found Campus App
+# FoundIt @ MIU – Lost and Found Campus App
 
-> A smart, secure, and student-only Flutter app to help MIU students report and recover lost or found items on campus.
-
----
-
-## 🧾 Project Description
-
-**FoundIt @ MIU** is a mobile application designed exclusively for students at **Misr International University (MIU)**. It helps them post, find, and recover lost and found items using Firebase for secure authentication and data management.
-
-The app includes a **questionnaire-based matching system** that ensures items are only returned to their rightful owners after verification through structured answers and auto-ranking logic.
+A smart, secure, student-only Flutter application that helps MIU students report, search for, and recover lost or found items on campus.
 
 ---
 
-## 🔍 Advanced Matching Logic
+## Project Description
 
-1. **User Who Found an Item**:
-   - Posts the item with: image, name, description, and MIU building location.
-   - Fills out a **Finder Questionnaire** describing item traits and found details.
+**FoundIt @ MIU** is a mobile application designed exclusively for students at **Misr International University (MIU)**. The app allows students to post lost or found items, search available reports, and recover belongings through a secure verification process.
 
-2. **User Who Lost an Item**:
-   - Answers the same **Seeker Questionnaire**.
-   - The app compares both sets of answers and calculates a **match score**.
+FoundIt uses **Firebase Authentication**, **Cloud Firestore**, and **Firebase Storage** to provide secure login, real-time data management, image uploads, and private communication between matched users.
 
-3. **Matching Workflow**:
-   - ❌ If the lost date > found date → request auto-declined.
-   - 🏆 Highest scoring user sees the item image and confirms.
-   - ✅ If confirmed, a private **chat system** opens for meetup coordination.
-   - ❌ If denied, next top-matching user is notified.
+The main goal of the app is to make the lost-and-found process more organized, trustworthy, and efficient by using a questionnaire-based matching system. This system helps ensure that items are returned only to their rightful owners.
 
 ---
 
-## 🚀 Key Features
+## Advanced Matching Logic
 
-| Feature | Description |
-|--------|-------------|
-| 🔐 Firebase Auth | Student-only access (Google/email login) |
-| 📍 Location Tagging | Identify exact MIU building where the item was found |
-| 🧾 Questionnaire Forms | Structured questions for finders and seekers |
-| 🧠 Auto Matching | Algorithm ranks answers and controls access to item |
-| 📸 Image Upload | Photos help identify items visually |
-| 💬 Chat System | Connect matched users privately to arrange return |
-| 🔎 Search & Filter | Explore lost/found items by name or tag |
-| 🌗 Dark Mode | Toggle between light and dark themes |
-| 👤 Profile Management | View/edit/delete your posts |
-| ✅ Mark as Returned | Close the item case after return |
+FoundIt includes a structured matching workflow that verifies ownership before revealing item details or opening communication.
+
+### 1. Finder Workflow
+
+A student who finds an item can create a found-item report by providing:
+
+* Item image
+* Item name
+* Item description
+* MIU building or campus location
+* Answers to a finder questionnaire describing the item and where it was found
+
+### 2. Seeker Workflow
+
+A student who lost an item can submit a lost-item request by answering a seeker questionnaire. The answers are compared against the finder’s questionnaire to calculate a match score.
+
+### 3. Matching Workflow
+
+* If the lost date is later than the found date, the request is automatically declined.
+* The user with the highest match score gets access to the item image for confirmation.
+* If the user confirms the match, a private chat opens between the finder and the seeker.
+* If the user denies the match, the next highest-ranking user is notified.
+* Once the item is returned, the case can be marked as completed.
 
 ---
 
-## 🗂 Folder Structure
+## Key Features
 
-```
+| Feature                   | Description                                                          |
+| ------------------------- | -------------------------------------------------------------------- |
+| Firebase Authentication   | Secure student-only login using Google or email authentication       |
+| Location Tagging          | Allows users to tag the MIU building where an item was lost or found |
+| Questionnaire Forms       | Structured questions for both finders and seekers                    |
+| Auto Matching and Scoring | Ranks possible owners based on questionnaire similarity              |
+| Image Upload              | Supports item photos to help users identify belongings               |
+| Image Reveal Logic        | Reveals item images only after a strong questionnaire match          |
+| Private Chat              | Enables matched users to coordinate item return securely             |
+| Search and Filter         | Allows users to search and filter lost or found items                |
+| Dark Mode                 | Supports both light and dark themes                                  |
+| Profile Management        | Users can view, edit, and delete their own posts                     |
+| Mark as Returned          | Allows users to close a case after the item is returned              |
+
+---
+
+## Folder Structure
+
+```text
 /lib
  ┣ /models
  ┃ ┗ item_model.dart
  ┣ /screens
+ ┃ ┣ auth_screen.dart
  ┃ ┣ home_screen.dart
  ┃ ┣ post_item_screen.dart
- ┃ ┣ auth_screen.dart
  ┃ ┣ questionnaire_screen.dart
- ┃ ┣ chat_screen.dart
- ┗ /widgets
-    ┣ item_card.dart
-    ┣ custom_form_field.dart
-    ┗ questionnaire_widget.dart
+ ┃ ┗ chat_screen.dart
  ┣ /services
- ┃ ┣ firebase_service.dart
  ┃ ┣ auth_service.dart
+ ┃ ┣ firebase_service.dart
  ┃ ┗ match_scoring_service.dart
  ┣ /utils
  ┃ ┗ constants.dart
+ ┣ /widgets
+ ┃ ┣ custom_form_field.dart
+ ┃ ┣ item_card.dart
+ ┃ ┗ questionnaire_widget.dart
  ┗ main.dart
 ```
 
 ---
 
-## 🧠 Software Requirements Specification (SRS)
+## Software Requirements Specification
 
-### ✅ Functional Requirements
-- Firebase Authentication
-- Item Posting (Lost/Found)
-- Image Uploading
-- Finder/Seeker Questionnaires
-- Auto Matching & Scoring
-- Chat System
-- Item Search & Filtering
-- User Profiles
+### Functional Requirements
 
-### ⚙ Non-Functional Requirements
-- Secure Firebase-based access
-- Responsive, Material Design UI
-- Works offline with Firebase sync
-- Scalable and real-time backend
+The application should allow users to:
 
-### 💻 Tools & Platforms
-- **Flutter** (Mobile development)
-- **Firebase** (Auth, Firestore, Storage)
-- **Dart**
-- Android / iOS Support
+* Register and log in securely using Firebase Authentication
+* Post lost or found items
+* Upload images for item reports
+* Add item descriptions and campus location details
+* Complete finder and seeker questionnaires
+* Automatically match lost-item requests with found-item reports
+* Rank matches using a scoring algorithm
+* Search and filter item posts
+* Chat privately after a successful match
+* Manage user profiles and personal posts
+* Mark returned items as completed
 
----
+### Non-Functional Requirements
 
-## 📅 Project Timeline – Gantt Chart
+The application should provide:
 
-| Week | Task |
-|------|------|
-| **Week 1** | Project planning, UI wireframes, Firebase setup |
-| **Week 2** | Firebase Auth, Post Item UI & Form |
-| **Week 3** | Search, Filter, View Posts |
-| **Week 4** | Questionnaire logic and scoring system |
-| **Week 5** | Image reveal system + Chat system |
-| **Week 6** | Final tests, debugging, UI polish, deployment |
+* Secure access using Firebase Authentication
+* Real-time database updates through Cloud Firestore
+* Reliable image storage using Firebase Storage
+* A responsive and user-friendly Material Design interface
+* Support for both Android and iOS
+* Scalable data structure for future campus expansion
+* Offline support through Firebase synchronization where applicable
 
 ---
 
+## Tools and Technologies
 
-## 📬 Contact
-
-For inquiries or suggestions, please contact the development team at:  
-📧 `foundit@miu.edu.eg`
+| Tool                     | Purpose                                       |
+| ------------------------ | --------------------------------------------- |
+| Flutter                  | Cross-platform mobile application development |
+| Dart                     | Main programming language                     |
+| Firebase Authentication  | User login and access control                 |
+| Cloud Firestore          | Real-time database                            |
+| Firebase Storage         | Image upload and storage                      |
+| Android Studio / VS Code | Development environment                       |
+| Android / iOS            | Target mobile platforms                       |
 
 ---
 
-## 📄 License
+## Project Timeline
 
-MIT License. See `LICENSE.md` for more info.
-```
+| Week   | Task                                                              |
+| ------ | ----------------------------------------------------------------- |
+| Week 1 | Project planning, UI wireframes, and Firebase setup               |
+| Week 2 | Firebase Authentication, item posting UI, and form implementation |
+| Week 3 | Search, filtering, and item listing screens                       |
+| Week 4 | Questionnaire logic and match-scoring system                      |
+| Week 5 | Image reveal logic and private chat system                        |
+| Week 6 | Testing, debugging, UI polish, and deployment preparation         |
+
+---
+
+## Future Enhancements
+
+* Admin dashboard for managing reports and flagged posts
+* Push notifications for match updates and chat messages
+* QR code verification for item handover
+* Improved AI-based image similarity matching
+* Analytics dashboard for common lost-item locations
+* Support for multiple university campuses
+
+---
+
+## Contact
+
+For inquiries or suggestions, please contact the development team at:
+
+`foundit@miu.edu.eg`
+
+---
+
+## License
+
+This project is licensed under the MIT License. See `LICENSE.md` for more information.
